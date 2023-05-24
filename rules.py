@@ -336,14 +336,12 @@ async def wfNextNightSkill(bot: Bot) -> None:
 
 # 发送技能
 async def wfSendSkill(bot: Bot, nowRole: int) -> None:
-    global nowNightSkillDoCnt
-    if nowNightSkillDoCnt >= RoleConfig[nowRole]:
+    if RoleConfig[nowRole] <= 0:
         await botio.groupSend(
             bot, ActiveGroup, Message(f"跳过了 {type2RoleStr[nowRole]} 的回合")
         )
         await wfNextNightSkill(bot)
         return
-    nowNightSkillDoCnt = nowNightSkillDoCnt + 1
     await botio.groupSend(bot, ActiveGroup, Message(f"现在是 {type2RoleStr[nowRole]} 的回合"))
     for user in ActiveUsers:
         if UserId2Role[user].type == nowRole:
@@ -354,6 +352,7 @@ async def wfSendSkill(bot: Bot, nowRole: int) -> None:
 
 # 处理技能
 async def wfNightSkillProc(bot: Bot, event: MessageEvent, arg: Message) -> None:
+    global nowNightSkillDoCnt
     if event.message_type != "private":
         await bot.send(event=event, message="请私聊 bot 使用!", at_sender=True)
         return
@@ -367,6 +366,8 @@ async def wfNightSkillProc(bot: Bot, event: MessageEvent, arg: Message) -> None:
     userId = event.get_user_id()
     userRole = UserId2Role[userId]
     args = str(arg).split()
+    if userRole.death == True:
+        await bot.send(event=event, message="你已经死亡!")
     if userRole.type != nowNightSkillProcess:
         await bot.send(event=event, message="现在不是你的回合!")
     if userRole.type == 0:
@@ -391,15 +392,16 @@ async def wfNightSkillProc(bot: Bot, event: MessageEvent, arg: Message) -> None:
         if len(args) <= 0:
             await bot.send(event=event, message="你要查谁?")
             return
+        # TODO 预言家技能
     elif userRole.type == 3:
+        # TODO 女巫技能
         pass
     elif userRole.type == 4:
+        # TODO 守卫技能
         pass
-    elif userRole.type == 5:
-        pass
-    elif userRole.type == 6:
-        pass
-    await wfNextNightSkill(bot)
+    nowNightSkillDoCnt = nowNightSkillDoCnt + 1
+    if nowNightSkillDoCnt > RoleConfig[nowNightSkillProcess]:
+        await wfNextNightSkill(bot)
 
 
 # 发送死亡信息
@@ -413,6 +415,7 @@ async def wfSendDeath(bot: Bot) -> None:
         res = "--死亡名单--"
         for i in DeathList:
             res = res + f"\n  {Num2UserId[i]} : {i}号 -> [CQ:at,qq={Num2UserId[i]}] 死了"
+            UserId2Role[Num2UserId[i]].death = True
         await botio.groupSend(bot, ActiveGroup, Message(res))
         await wfCheckOver()
 
