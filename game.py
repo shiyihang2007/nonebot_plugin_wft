@@ -91,7 +91,10 @@ class game:
         """
         - 启动
         - 分配身份
+        - 发送身份
         """
+        # TODO 身份分配
+        # TODO 发送身份
         pass
 
     async def night(self, bot: Bot) -> None:
