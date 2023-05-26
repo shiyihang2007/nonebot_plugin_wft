@@ -5,20 +5,20 @@ from .player import player
 class game:
     group: str = ""
     players: list[player] = []
-    config: list[str] = []
+    config: list[int] = []
 
     # 配置 人 狼 预言 女巫 守卫 骑士 猎人 黑狼 白狼 隐狼 白痴
-    def init(self, bot: Bot, event: MessageEvent, arg: Message):
+    async def init(self, bot: Bot, event: MessageEvent, arg: Message) -> None:
         self.config = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        self.customConfig(bot, event, arg)
+        await self.customConfig(bot, event, arg)
 
     # 自定义设置 类型:数量
-    def customConfig(self, bot: Bot, event: MessageEvent, arg: Message):
+    async def customConfig(self, bot: Bot, event: MessageEvent, arg: Message) -> None:
         args: list[str] = arg.extract_plain_text().split()
         for i in args:
-            input = i.split(":")
+            input: list[str] = i.split(":")
             if len(input) < 2:
-                bot.send(event, f"{input} 不合法")
+                await bot.send(event, f"{input} 不合法")
                 continue
             if input[0] == "人":
                 self.config[0] = int(input[1])
@@ -43,6 +43,6 @@ class game:
             elif input[0] == "chi":
                 self.config[1] = int(input[1])
             else:
-                bot.send(event, f"{input} 不合法")
+                await bot.send(event, f"{input} 不合法")
                 continue
-            bot.send(event, f"已将 {input[0]} 数量设为 {int(input[1])}")
+            await bot.send(event, f"已将 {input[0]} 数量设为 {int(input[1])}")
