@@ -121,6 +121,15 @@ class game:
         pass
 
     async def discuss(self) -> None:
+        '''
+        - 轮流发言 邀请
+        '''
+        pass
+
+    async def discussSkip(self) -> None:
+        '''
+        - 轮流发言 结束
+        '''
         pass
 
     async def sendDeath(self) -> None:
