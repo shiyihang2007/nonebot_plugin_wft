@@ -1,3 +1,4 @@
+import random
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageEvent
 from .player import player
 from .units import type2RoleSkill, type2RoleSkillHint, type2RoleStr
@@ -76,7 +77,6 @@ class game:
         thisPlayer = player()
         thisPlayer.qq = event.get_user_id()
         thisPlayer.death = False
-        thisPlayer.id = len(self.players) + 1
         thisPlayer.role = ""
         self.players.append(thisPlayer)
         await bot.send(
@@ -93,7 +93,20 @@ class game:
         - 分配身份
         - 发送身份
         """
-        # TODO 身份分配
+        random.shuffle(self.players)
+        cnt = 1
+        for i in self.players:
+            i.id = cnt
+            cnt += 1
+        random.shuffle(self.players)
+        nowRole: int = 0
+        nowCnt: int = 0
+        for i in self.players:
+            while nowCnt == self.config[nowRole]:
+                nowCnt = 0
+                nowRole += 1
+            i.role = type2RoleStr[nowRole]
+            nowCnt += 1
         # TODO 发送身份
         pass
 
