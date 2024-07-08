@@ -288,7 +288,7 @@ class RoleHunter(RolePerson):
 
     def onDeath(self, reason: str) -> str | None:
         if reason in ["被刀了", "被票出了"]:
-            return "你已经死亡,请考虑枪谁,不使用技能回复/枪 0\neg:/枪 阿拉伯数字"
+            return "你已经死亡,请考虑枪谁,不使用技能回复/不使用技能\neg:/枪 阿拉伯数字"
         return None
 
 
@@ -368,97 +368,3 @@ class RoleStupid(RolePerson):
 【阵营】：好人阵营，神职
 【能力】：白痴被投票出局，可以翻开自己的身份牌，免疫此次放逐，之后可以正常发言，但不能投票，狼人仍需要击杀他才能让他死亡。但若是白痴因非投票原因死亡，则无法发动技能，立即死亡。
 【目标】：驱逐全部狼人出局。"""
-
-
-# 随机排列角色顺序
-def randomRoleType(
-    *typelist: int,
-):
-    reslist: list[int] = []
-    for i in typelist:
-        reslist.append(i)
-    random.shuffle(reslist)
-    return reslist
-
-
-# 随机模式
-def randomMode(playerCount: int) -> tuple[list[int], list[int]]:
-    roleCnt: list[int] = [0, 0, 0]
-    roleEnabled: list[int] = []
-    if playerCount == 6:
-        roleCnt = [2, 2, 2]
-        if random.randint(0, 1) == 0:
-            roleEnabled = [0, 1, 2, 3]
-        else:
-            roleEnabled = [0, 1, 2, 4]
-    elif playerCount == 7:
-        roleCnt = [4, 2, 1]
-        roleEnabled = [0, 1, 2, 3, 4, 6, 8]
-    elif playerCount == 8:
-        roleCnt = [3, 3, 2]
-        roleEnabled = [1, 0, 2, 4, 5]
-    elif playerCount == 9:
-        roleCnt = [3, 3, 3]
-        roleEnabled = [1, 0, 2, 4, 3, 6]
-    elif playerCount == 10 or playerCount == 11:
-        m = random.randint(0, 2)
-        if m == 0:
-            roleCnt = [3, 3, playerCount - 6]
-            roleEnabled = [1, 0, 2, 3, 6]
-        elif m == 1:
-            roleCnt = [4, 3, playerCount - 7]
-            roleEnabled = [
-                1,
-                8,
-                0,
-                2,
-                3,
-                5,
-                10,
-            ]
-        elif m == 2:
-            roleCnt = [3, 4, playerCount - 7]
-            roleEnabled = [1, 0, 2, 3, 5, 9]
-    elif playerCount == 12:
-        m = random.randint(0, 4)
-        roleCnt = [4, 4, 4]
-        if m == 0:
-            roleEnabled = [
-                1,
-                0,
-                2,
-                3,
-                6,
-                randomRoleType(1, 10, 4)[0],
-            ]
-        elif m == 1:
-            roleEnabled = [
-                1,
-                9,
-                0,
-                2,
-                3,
-                6,
-            ]
-        elif m == 2:
-            roleEnabled = [
-                1,
-                8,
-                0,
-                2,
-                3,
-                randomRoleType(1, 5, 6)[0],
-                4,
-            ]
-        elif m == 3:
-            roleEnabled = [
-                1,
-                7,
-                0,
-                2,
-                3,
-                6,
-                randomRoleType(1, 4)[0],
-            ]
-
-    return roleCnt, roleEnabled
