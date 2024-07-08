@@ -1,6 +1,6 @@
 # 维护流程信息
 
-from src.plugins.nonebot_plugin_wft.units import role
+from .units import RoleBase
 
 # 参与的用户
 ActiveUsers: list[str] = []
@@ -13,7 +13,7 @@ RoleCnt: list[int] = []
 RoleConfig: dict[int, int] = {}
 
 # 身份映射
-UserId2Role: dict[str, role] = {}
+UserId2Role: dict[str, RoleBase] = {}
 Num2UserId: dict[int, str] = {}
 
 # 游戏状态
