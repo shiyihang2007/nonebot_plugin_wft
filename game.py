@@ -1,8 +1,8 @@
 import random
 
-from gameBase import GameBase
-from roles import RoleBase
-from botio import BotIO
+from .gameBase import GameBase
+from .roles import RoleBase
+from .botio import BotIO
 
 
 class Game(GameBase):

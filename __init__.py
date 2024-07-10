@@ -1,6 +1,6 @@
 # 命令处理
-from game import Game
-from botio import BotIO
+from .game import Game
+from .botio import BotIO
 from . import roles
 
 from nonebot.adapters.onebot.v11 import Bot, Message, GroupMessageEvent
