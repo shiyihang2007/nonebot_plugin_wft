@@ -41,7 +41,7 @@ class Game(GameBase):
     def addPlayer(self, player: str):
         self.playerList.append(player)
 
-    def addRole(self, role):
+    def addRole(self, role: RoleBase):
         self.roleList.append(role)
 
     def removePlayer(self, pos):
@@ -90,9 +90,12 @@ class Game(GameBase):
             return error
 
     def _nightActions(self, io: BotIO) -> str | None:
-        if msg := self.roleList[self.roleActionList[self.i]].onNight():
-            io.privateSend(self.roleList[self.roleActionList[self.i]].name, msg)
-        self.i += 1
+        if self.i < len(self.roleList):
+            if msg := self.roleList[self.roleActionList[self.i]].onNight():
+                io.privateSend(self.roleList[self.roleActionList[self.i]].name, msg)
+            self.i += 1
+        else:
+            self.onDay(io)
 
     def onDay(self, io: BotIO) -> str | None:
         if len(self.lstDeath) > 0:

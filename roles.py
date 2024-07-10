@@ -19,6 +19,8 @@ class RoleBase:
 
     isDeath: bool
 
+    typeAlias: list[str] = []
+
     def __init__(self) -> None:
         self.id = 0
         self.name = ""
