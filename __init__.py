@@ -34,8 +34,8 @@ def get_classes_in_module(module: object):
     return classes
 
 
-ban_user: dict[str, set[str]] = {}
-enabled_groups: set[str] = {}
+ban_user: dict[str, set[str]] = dict()
+enabled_groups: set[str] = set()
 
 
 async def is_enabled(event: MessageEvent) -> bool:
