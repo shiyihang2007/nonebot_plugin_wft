@@ -183,6 +183,6 @@ class Game(GameBase):
             self.groupId, f"{[x.id for x in self.roleList if not x.isDeath]} 生还"
         )
         msg: str = "角色列表:\n"
-        for x in [f" [CQ:at,qq={x.id}]: {x.getType()}\n" for x in self.roleList]:
+        for x in [f"[CQ:at,qq={x.id}]: {x.getType()}\n" for x in self.roleList]:
             msg += x
         self.io.groupSend(self.groupId, msg.removesuffix("\n"))

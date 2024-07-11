@@ -189,7 +189,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     if playerId in games[groupId].playerList:
         await commandJoin.finish("不能重复加入游戏")
     games[groupId].addPlayer(playerId)
-    await commandJoin.finish(f" [CQ:at,qq={str(int(playerId))}] 已加入游戏")
+    await commandJoin.finish(Message(f"[CQ:at,qq={str(int(playerId))}] 已加入游戏"))
 
 
 @commandExit.handle()
@@ -200,7 +200,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
         await commandEnd.finish("没有正在进行的游戏. ")
     playerId: str = event.get_user_id()
     games[groupId].removePlayer(games[groupId].playerList.index(playerId))
-    await commandExit.finish(f" [CQ:at,qq={str(int(playerId))}] 已离开游戏")
+    await commandExit.finish(Message(f"[CQ:at,qq={str(int(playerId))}] 已离开游戏"))
 
 
 @commandAddrole.handle()
