@@ -197,7 +197,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     if groupId not in games.keys() or not games[groupId]:
         await commandEnd.finish("没有正在进行的游戏. ")
     playerId: str = event.get_user_id()
-    games[groupId].removePlayer(playerId)
+    games[groupId].removePlayer(games[groupId].playerList.index(playerId))
     await commandExit.finish(f"[CQ:at,qq={playerId}] 已离开游戏")
 
 
@@ -237,6 +237,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
                 logger.warning(
                     f"Other items with the same name ({roleName}) are ignored. e.g.{tps[1:]}"
                 )
+            pos = games[groupId].playerList.index(tps[0])
         tp = games[groupId].roleList[pos].getType()
         games[groupId].removeRole(pos)
         await commandAddrole.send(f"已删除角色 {tp}")
