@@ -162,7 +162,7 @@ games: dict[str, Game] = {}
 async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
-    if games[groupId]:
+    if groupId in games.keys() and games[groupId]:
         await commandInit.finish("请先结束上一局游戏. ")
     games[groupId] = Game(groupId, BotIO(bot))
     await commandInit.finish("游戏已创建")
@@ -172,9 +172,10 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
-    if not games[groupId]:
+    if groupId not in games.keys() or not games[groupId]:
         await commandEnd.finish("没有正在进行的游戏. ")
     games[groupId].endsUp()
+    del games[groupId]
     await commandEnd.finish("游戏已结束")
 
 
@@ -182,6 +183,8 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
+    if groupId not in games.keys() or not games[groupId]:
+        await commandEnd.finish("没有正在进行的游戏. ")
     playerId: str = event.get_user_id()
     games[groupId].addPlayer(playerId)
     await commandJoin.finish(f"[CQ:at,qq={playerId}] 已加入游戏")
@@ -191,6 +194,8 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
+    if groupId not in games.keys() or not games[groupId]:
+        await commandEnd.finish("没有正在进行的游戏. ")
     playerId: str = event.get_user_id()
     games[groupId].removePlayer(playerId)
     await commandExit.finish(f"[CQ:at,qq={playerId}] 已离开游戏")
@@ -200,6 +205,8 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
+    if groupId not in games.keys() or not games[groupId]:
+        await commandEnd.finish("没有正在进行的游戏. ")
     roleList = args.extract_plain_text().split(" ")
     roleClasses: list[roles.RoleBase] = get_classes_in_module(roles)
     for roleName in roleList:
@@ -218,6 +225,8 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
+    if groupId not in games.keys() or not games[groupId]:
+        await commandEnd.finish("没有正在进行的游戏. ")
     roleList = args.extract_plain_text().split(" ")
     for roleName in roleList:
         if roleName is int:
@@ -237,6 +246,8 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
+    if groupId not in games.keys() or not games[groupId]:
+        await commandEnd.finish("没有正在进行的游戏. ")
     await commandShowroles.send(
         f"角色列表: {[x.getType() for x in games[groupId].roleList]}"
     )
@@ -246,6 +257,8 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
+    if groupId not in games.keys() or not games[groupId]:
+        await commandEnd.finish("没有正在进行的游戏. ")
     if error := games[groupId].useDefaultRoleLists():
         await commandAutoroles.finish(error)
 
@@ -254,7 +267,12 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
+    if groupId not in games.keys() or not games[groupId]:
+        await commandEnd.finish("没有正在进行的游戏. ")
     if error := games[groupId].start():
+        if error[-1:-3] == "获胜":
+            await games[groupId].endsUp()
+            del games[groupId]
         await commandStart.finish(error)
 
 
@@ -274,7 +292,10 @@ async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
         await commandSkill.finish("你还不能行动")
     role.canUseSkill = False
     role.useSkill()
-    myGame._nightActions()
+    if error := myGame._nightActions():
+        if error[-1:-3] == "获胜":
+            await games[myGame.groupId].endsUp()
+            del games[myGame.groupId]
 
 
 @commandSkip.handle()
@@ -292,4 +313,7 @@ async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
     if not role.canUseSkill:
         await commandSkill.finish("你还不能行动")
     role.canUseSkill = False
-    myGame._nightActions()
+    if error := myGame._nightActions():
+        if error[-1:-3] == "获胜":
+            await games[myGame.groupId].endsUp()
+            del games[myGame.groupId]

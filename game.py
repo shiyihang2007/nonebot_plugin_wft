@@ -84,7 +84,8 @@ class Game(GameBase):
         self.roleActionList = range(len(self.roleList))
         self.roleActionList.sort(key=lambda x: self.roleList[x].getPriority())
         self.i = 0
-        self.onNight(self)
+        if error := self.onNight(self):
+            return error
 
     # 每天事务
     def onNight(self) -> str | None:
@@ -103,7 +104,8 @@ class Game(GameBase):
                 )
             self.i += 1
         else:
-            self.onDay()
+            if error := self.onDay():
+                return error
 
     def onDay(self) -> str | None:
         if len(self.lstDeath) > 0:
@@ -166,7 +168,7 @@ class Game(GameBase):
             and not x.isDeath
         ]
         if not goods and not bads and not others:
-            return "无人生还"
+            return "无人获胜"
         elif (self.killEdge and not persons and not others) or (
             not self.killEdge and not goods and not others
         ):
