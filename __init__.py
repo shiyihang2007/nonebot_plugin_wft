@@ -186,8 +186,10 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     if groupId not in games.keys() or not games[groupId]:
         await commandEnd.finish("没有正在进行的游戏. ")
     playerId: str = event.get_user_id()
+    if playerId in games[groupId].playerList:
+        await commandJoin.finish("不能重复加入游戏")
     games[groupId].addPlayer(playerId)
-    await commandJoin.finish(f"[CQ:at,qq={playerId}] 已加入游戏")
+    await commandJoin.finish(f"[CQ:at,qq={str(int(playerId))}] 已加入游戏")
 
 
 @commandExit.handle()
@@ -198,7 +200,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
         await commandEnd.finish("没有正在进行的游戏. ")
     playerId: str = event.get_user_id()
     games[groupId].removePlayer(games[groupId].playerList.index(playerId))
-    await commandExit.finish(f"[CQ:at,qq={playerId}] 已离开游戏")
+    await commandExit.finish(f"[CQ:at,qq={str(int(playerId))}] 已离开游戏")
 
 
 @commandAddrole.handle()
@@ -217,6 +219,9 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
             logger.warning(
                 f"Other items with the same name ({roleName}) are ignored. e.g.{tps[1:]}"
             )
+        if len(tps) == 0:
+            await commandAutoroles.send(f"非法的角色名 {roleName}")
+            continue
         games[groupId].addRole(tps[0])
         await commandAddrole.send(f"已添加角色 {tps[0].getType()}")
 
