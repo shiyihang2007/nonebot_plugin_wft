@@ -45,7 +45,7 @@ async def is_enabled(event: MessageEvent) -> bool:
         # 在允许的群聊中启用
         if group_id in enabled_groups:
             # 不回复黑名单用户
-            return not ban_user[group_id] or user_id not in ban_user[group_id]
+            return group_id not in ban_user.keys() or user_id not in ban_user[group_id]
         return False
     # 启用私聊
     return True
