@@ -160,13 +160,11 @@ games: dict[str, Game] = {}
 
 @commandInit.handle()
 async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
-    global games, io
-    if not io:
-        io = BotIO(bot)
+    global games
     groupId: str = str(event.group_id)
     if games[groupId]:
         await commandInit.finish("请先结束上一局游戏. ")
-    games[groupId] = Game(groupId)
+    games[groupId] = Game(groupId, BotIO(bot))
     await commandInit.finish("游戏已创建")
 
 
@@ -176,7 +174,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     groupId: str = str(event.group_id)
     if not games[groupId]:
         await commandEnd.finish("没有正在进行的游戏. ")
-    games[groupId].endsUp(io)
+    games[groupId].endsUp()
     await commandEnd.finish("游戏已结束")
 
 
@@ -256,7 +254,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     global games
     groupId: str = str(event.group_id)
-    if error := games[groupId].start(io):
+    if error := games[groupId].start():
         await commandStart.finish(error)
 
 

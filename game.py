@@ -6,7 +6,9 @@ from .botio import BotIO
 
 
 class Game(GameBase):
+
     groupId: str = ""
+    io: BotIO
 
     playerList: list[str] = []
     roleList: list[RoleBase] = []
@@ -23,8 +25,9 @@ class Game(GameBase):
     i: int = 0
     votes: list[int] = []
 
-    def __init__(self, group: str) -> None:
+    def __init__(self, group: str, io: BotIO) -> None:
         self.groupId = group
+        self.io = io
 
         self.playerList = []
         self.roleList = []
@@ -75,7 +78,7 @@ class Game(GameBase):
         except:
             return "随机匹配失败了. 请检查人数和角色数是否匹配. "
 
-    def start(self, io: BotIO) -> str | None:
+    def start(self) -> str | None:
         if error := self.randomRoles():
             return error
         self.roleActionList = range(len(self.roleList))
@@ -84,59 +87,61 @@ class Game(GameBase):
         self.onNight(self)
 
     # 每天事务
-    def onNight(self, io: BotIO) -> str | None:
-        io.groupSend(self.groupId, "天黑请闭眼")
+    def onNight(self) -> str | None:
+        self.io.groupSend(self.groupId, "天黑请闭眼")
         for x in self.roleList:
             x.canUseSkill = False
-        if error := self._nightActions(io):
+        if error := self._nightActions():
             return error
 
-    def _nightActions(self, io: BotIO) -> str | None:
+    def _nightActions(self) -> str | None:
         if self.i < len(self.roleList):
             if msg := self.roleList[self.roleActionList[self.i]].onNight():
                 self.roleList[self.roleActionList[self.i]].canUseSkill = True
-                io.privateSend(self.roleList[self.roleActionList[self.i]].name, msg)
+                self.io.privateSend(
+                    self.roleList[self.roleActionList[self.i]].name, msg
+                )
             self.i += 1
         else:
-            self.onDay(io)
+            self.onDay()
 
-    def onDay(self, io: BotIO) -> str | None:
+    def onDay(self) -> str | None:
         if len(self.lstDeath) > 0:
             deathMsg: str = ""
             for i in self.deathList:
                 deathMsg += f"[CQ:at,qq={i}],"
             deathMsg = deathMsg.removesuffix(",")
-            io.groupSend(
+            self.io.groupSend(
                 self.groupId,
                 f"天亮了, 昨晚 {deathMsg} 死了",
             )
         else:
-            io.groupSend(
+            self.io.groupSend(
                 self.groupId,
                 "天亮了, 昨晚是平安夜",
             )
-        if error := self.checkEnding(io):
+        if error := self.checkEnding():
             return error
         self.i = 0
-        if error := self._giveSpeech(io):
+        if error := self._giveSpeech():
             return error
 
-    def checkEnding(self, io: BotIO) -> str | None:
+    def checkEnding(self) -> str | None:
         if msg := self._checkEnding():
-            io.groupSend(self.groupId, msg)
+            self.io.groupSend(self.groupId, msg)
             return msg
 
-    def _giveSpeech(self, io: BotIO) -> str | None:
-        io.groupSend(
+    def _giveSpeech(self) -> str | None:
+        self.io.groupSend(
             self.groupId,
             f"""有请 [CQ:at,qq={self.playerList[self.i if self.nowDays % 2 == 1 else len(self.playerList) - self.i + 1]}] 发言
               结束请发 过""",
         )
         self.i += 1
 
-    def _vote(self, io: BotIO) -> str | None:
+    def _vote(self) -> str | None:
         self.votes = [0] * len(self.playerList)
-        io.groupSend(
+        self.io.groupSend(
             self.groupId,
             """进入投票环节
             投票请发 投 谁
@@ -171,11 +176,11 @@ class Game(GameBase):
         elif others and not goods and not bads:
             return f"{[f"[CQ:at,qq={x}]" for x in others]} 获胜"
 
-    def endsUp(self, io: BotIO) -> str | None:
-        io.groupSend(
+    def endsUp(self) -> str | None:
+        self.io.groupSend(
             self.groupId, f"{[x.id for x in self.roleList if not x.isDeath]} 生还"
         )
         msg: str = "角色列表:\n"
         for x in [f"[CQ:at,qq={x.id}]: {x.getType()}\n" for x in self.roleList]:
             msg += x
-        io.groupSend(self.groupId, msg.removesuffix("\n"))
+        self.io.groupSend(self.groupId, msg.removesuffix("\n"))
