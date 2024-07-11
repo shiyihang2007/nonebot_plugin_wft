@@ -86,12 +86,15 @@ class Game(GameBase):
     # 每天事务
     def onNight(self, io: BotIO) -> str | None:
         io.groupSend(self.groupId, "天黑请闭眼")
+        for x in self.roleList:
+            x.canUseSkill = False
         if error := self._nightActions(io):
             return error
 
     def _nightActions(self, io: BotIO) -> str | None:
         if self.i < len(self.roleList):
             if msg := self.roleList[self.roleActionList[self.i]].onNight():
+                self.roleList[self.roleActionList[self.i]].canUseSkill = True
                 io.privateSend(self.roleList[self.roleActionList[self.i]].name, msg)
             self.i += 1
         else:
@@ -112,9 +115,16 @@ class Game(GameBase):
                 self.groupId,
                 "天亮了, 昨晚是平安夜",
             )
+        if error := self.checkEnding(io):
+            return error
         self.i = 0
         if error := self._giveSpeech(io):
             return error
+
+    def checkEnding(self, io: BotIO) -> str | None:
+        if msg := self._checkEnding():
+            io.groupSend(self.groupId, msg)
+            return msg
 
     def _giveSpeech(self, io: BotIO) -> str | None:
         io.groupSend(
@@ -133,7 +143,7 @@ class Game(GameBase):
             弃票请投 -1""",
         )
 
-    def checkEnding(self) -> str | None:
+    def _checkEnding(self) -> str | None:
         goods = [
             x.id for x in self.roleList if x.getBelong() == "好人阵营" and not x.isDeath
         ]

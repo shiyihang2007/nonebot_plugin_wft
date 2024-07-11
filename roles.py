@@ -18,6 +18,7 @@ class RoleBase:
     name: str
 
     isDeath: bool
+    canUseSkill: bool
 
     typeAlias: list[str] = []
 
@@ -25,6 +26,7 @@ class RoleBase:
         self.id = 0
         self.name = ""
         self.isDeath = False
+        self.canUseSkill = False
 
     def getId(self) -> int:
         return -1
@@ -51,6 +53,9 @@ class RoleBase:
         return None
 
     def onDeath(self) -> str | None:
+        return None
+
+    def useSkill(self) -> str | None:
         return None
 
 
