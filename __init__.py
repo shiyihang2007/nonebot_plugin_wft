@@ -206,7 +206,9 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     if groupId not in games.keys() or not games[groupId]:
         await commandEnd.finish("没有正在进行的游戏. ")
     roleList = args.extract_plain_text().split(" ")
-    roleClasses: list[roles.RoleBase] = get_classes_in_module(roles)
+    roleClasses: list[roles.RoleBase] = [
+        x for x in get_classes_in_module(roles) if issubclass(x, roles.RoleBase)
+    ]
     for roleName in roleList:
         tps: list[roles.RoleBase] = [
             x() for x in roleClasses if roleName in x.typeAlias
