@@ -235,7 +235,7 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
         if roleName is int:
             pos = roleName
         else:
-            tps = [x() for x in games[groupId].roleList if roleName in x.typeAlias]
+            tps = [x for x in games[groupId].roleList if roleName in x.typeAlias]
             if len(tps) > 1:
                 logger.warning(
                     f"Other items with the same name ({roleName}) are ignored. e.g.{tps[1:]}"
