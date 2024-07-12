@@ -31,6 +31,9 @@ class RoleBase:
         self.isDeath = False
         self.canUseSkill = False
 
+    def __eq__(self, value: object) -> bool:
+        return self.id == value.id and self.getId() == value.getId()
+
     def getId(self) -> int:
         raise NotImplementedError
 
