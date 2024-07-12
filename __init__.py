@@ -235,12 +235,9 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
         if roleName is int:
             pos = roleName
         else:
-            tps = [x for x in games[groupId].roleList if roleName in x.typeAlias]
-            if len(tps) > 1:
-                logger.warning(
-                    f"Other items with the same name ({roleName}) are ignored. e.g.{tps[1:]}"
-                )
-            pos = games[groupId].playerList.index(tps[0])
+            for x in games[groupId].roleList:
+                if roleName in x.typeAlias:
+                    pos = games[groupId].playerList.index(x)
         tp = games[groupId].roleList[pos].getType()
         games[groupId].removeRole(pos)
         await commandAddrole.send(f"已删除角色 {tp}")
