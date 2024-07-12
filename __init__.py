@@ -67,7 +67,7 @@ async def is_admin(bot: Bot, event: MessageEvent) -> bool:
     return False
 
 
-commandConfig = CommandGroup("wftconfig", rule=is_admin)
+commandConfig = CommandGroup("wftconfig", rule=to_me() & is_admin)
 commandEnable = commandConfig.command("enable", aliases={"启用"})
 commandDisable = commandConfig.command("disable", aliases={"禁用"})
 commandBan = commandConfig.command("ban", aliases={"拉黑"})
@@ -136,9 +136,7 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
 
 commandPrefix = CommandGroup("wft", rule=is_enabled)
 
-commandInit = commandPrefix.command(
-    "init", aliases={"创建", "开房", "初始化"}, rule=to_me()
-)
+commandInit = commandPrefix.command("init", aliases={"创建", "开房", "初始化"})
 commandEnd = commandPrefix.command("end", aliases={"结束", "中止"}, rule=to_me())
 
 commandJoin = commandPrefix.command("join", aliases={"加入", "加", "进入", "进"})
@@ -149,9 +147,7 @@ commandShowroles = commandPrefix.command("showroles", aliases={"显示角色", "
 commandAutoroles = commandPrefix.command("autoroles", aliases={"自动角色", "自动"})
 commandStart = commandPrefix.command("start", aliases={"开始", "启动"})
 
-commandSkill = commandPrefix.command(
-    "skill", aliases={"技能", "救", "刀", "查", "救", "毒"}
-)
+commandSkill = commandPrefix.command("skill", aliases={"技能", "药", "刀", "查", "救"})
 commandSkip = commandPrefix.command("skip", aliases={"跳过", "过", "不使用技能"})
 
 
@@ -296,8 +292,15 @@ async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
         await commandSkill.finish("你还没有角色")
     if not role.canUseSkill:
         await commandSkill.finish("你还不能行动")
+    try:
+        role.useSkill(
+            games[myGame.groupId],
+            games[myGame.groupId].io,
+            args.extract_plain_text().split(" "),
+        )
+    except ValueError:
+        await commandSkill.finish("非法的参数值")
     role.canUseSkill = False
-    role.useSkill()
     if error := myGame._nightActions():
         if error[-1:-3] == "获胜":
             await games[myGame.groupId].endsUp()

@@ -11,15 +11,19 @@ class Game(GameBase):
     io: BotIO
 
     playerList: list[str] = []
+    """ value: 用户id; index: 用户编号 """
     roleList: list[RoleBase] = []
+    """ value: 角色对象 """
     deathList: list[int] = []
+    """ value: 死亡的用户编号 """
+    deathReason: dict[str, str] = []
+    """ key: 用户id; value: 死亡原因 """
 
     killEdge: bool = False
     personSet: list[int] = [0]
 
     nowDays: int = 0
 
-    lstDeath: list[str] = []
     roleActionList: list[int] = []
 
     i: int = 0
@@ -39,6 +43,38 @@ class Game(GameBase):
 
         self.lstDeath = []
         self.roleActionList = []
+
+    # api
+    def name2id(self, name: str) -> int:
+        return self.playerList.index(name)
+
+    def id2name(self, id: str) -> str:
+        return self.playerList[id]
+
+    def playerKilled(self, id: int):
+        self.deathList.append(id)
+        self.deathReason[self.id2name(id)] = "被刀了"
+
+    def playerSaved(self, id: int):
+        self.deathList.remove(id)
+        del self.deathReason[self.id2name]
+
+    def playerPoisoned(self, id: int):
+        self.deathList.append(id)
+        self.deathReason[self.id2name(id)] = "被毒死了"
+
+    def getGroupId(self) -> str:
+        return self.groupId
+
+    def getDeadPlayer(self) -> str | None:
+        deads = [
+            x for x in self.deathList if self.deathReason[self.id2name(x)] == "被刀了"
+        ]
+        if len(deads) > 1:
+            raise IndexError
+        if len(deads) == 0:
+            return None
+        return self.id2name(deads[0])
 
     # 设置用
     def addPlayer(self, player: str):
@@ -89,6 +125,7 @@ class Game(GameBase):
 
     # 每天事务
     def onNight(self) -> str | None:
+        self.deathList = []
         self.io.groupSend(self.groupId, "天黑请闭眼")
         for x in self.roleList:
             x.canUseSkill = False
@@ -97,12 +134,12 @@ class Game(GameBase):
 
     def _nightActions(self) -> str | None:
         if self.i < len(self.roleList):
-            if msg := self.roleList[self.roleActionList[self.i]].onNight():
+            if self.roleList[self.roleActionList[self.i]].onNight():
                 self.roleList[self.roleActionList[self.i]].canUseSkill = True
-                self.io.privateSend(
-                    self.roleList[self.roleActionList[self.i]].name, msg
-                )
-            self.i += 1
+                self.i += 1
+            else:
+                self.i += 1
+                self._nightActions()
         else:
             if error := self.onDay():
                 return error
@@ -117,6 +154,9 @@ class Game(GameBase):
                 self.groupId,
                 f"天亮了, 昨晚 {deathMsg} 死了",
             )
+            for i in [x for x in self.roleList if x.name in self.deathList]:
+                i.isDeath = True
+                i.onDeath(self, self.io, self.deathReason[i.name])
         else:
             self.io.groupSend(
                 self.groupId,

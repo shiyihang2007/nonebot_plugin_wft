@@ -1,3 +1,6 @@
+from .botio import BotIO
+from .gameBase import GameBase
+
 deathReasons: list[str] = [
     "被刀了",
     "被票出了",
@@ -29,33 +32,50 @@ class RoleBase:
         self.canUseSkill = False
 
     def getId(self) -> int:
-        return -1
+        raise NotImplementedError
 
     def getType(self) -> str:
-        return "万物之母 (大雾)"
+        """获取角色类型
+
+        Returns:
+            str: 以字符串标识的类型
+        """
+        raise NotImplementedError
 
     def getBelong(self) -> str:
-        return """第三阵营"""
+        raise NotImplementedError
 
     def getIntro(self) -> str:
-        return """暂无介绍"""
+        raise NotImplementedError
 
     def getPriority(self) -> int:
+        """获取夜晚时行动的优先级
+
+        Returns:
+            int: 优先级, 小的优先执行
+        """
         return 0
 
-    def onNight(self) -> str | None:
+    def onNight(self, gameapi: GameBase, io: BotIO) -> bool:
+        """发送夜晚行动提示
+
+        Args:
+            gameapi (GameBase): 游戏接口
+            io (BotIO): 机器人接口
+
+        Returns:
+            bool: 是否等待用户回复
+        """
         return None
 
-    def onDay(self) -> str | None:
+    def onDay(self, gameapi: GameBase, io: BotIO) -> None:
         return None
 
-    def onPeopleDeath(self, who: str) -> str | None:
+    def onDeath(self, gameapi: GameBase, io: BotIO, reason: str) -> None:
         return None
 
-    def onDeath(self) -> str | None:
-        return None
-
-    def useSkill(self) -> str | None:
+    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+        """使用技能, 不检查 `self.canUseSkill`"""
         return None
 
 
@@ -66,8 +86,13 @@ class RolePerson(RoleBase):
     【能力】：无特殊技能，一觉睡到天亮。\n
     【目标】：分析其他玩家发言，认真地投出每一票，直到驱逐所有狼人。"""
 
+    typeAlias: list[str] = ["平民", "民", "people"]
+
     def getId(self) -> int:
         return 0
+
+    def getType(self) -> str:
+        return "平民"
 
     def getBelong(self) -> str:
         return """好人阵营"""
@@ -86,8 +111,16 @@ class RoleWolf(RoleBase):
     【能力】：每天夜里可以杀死一个人。\n
     【目标】：白天装作好人混淆视听，夜晚袭击村民，霸占村庄。"""
 
+    typeAlias: list[str] = ["狼人", "狼", "wolf"]
+
     def getId(self) -> int:
         return 1
+
+    def getPriority(self) -> int:
+        return 10
+
+    def getType(self) -> str:
+        return "狼人"
 
     def getIntro(self) -> str:
         return """【角色】：狼人
@@ -95,8 +128,23 @@ class RoleWolf(RoleBase):
 【能力】：每天夜里可以杀死一个人。
 【目标】：白天装作好人混淆视听，夜晚袭击村民，霸占村庄。"""
 
-    def onNight(self) -> str | None:
-        return "(多个狼人共享技能,请跟同伴商量好再出手)请商量刀谁,不使用技能回复/不使用技能\neg:/刀 阿拉伯数字"
+    def onNight(self, gameapi: GameBase, io: BotIO) -> str | None:
+        if who := gameapi.getDeadPlayer():
+            io.privateSend(
+                self.name,
+                f"你们今晚将会刀 {who}",
+            )
+            return False
+        else:
+            io.privateSend(
+                self.name,
+                "(请先和队友商量好再决定, 自己跳过后刀会给下一个队友)\n你要刀谁,跳过请回复/不使用技能\neg:/刀 阿拉伯数字",
+            )
+            return True
+
+    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+        gameapi.playerKilled(args[0])
+        io.privateSend(self.name, f"你们今晚将会刀 {args[0]}")
 
 
 class RolePredicter(RolePerson):
@@ -106,8 +154,16 @@ class RolePredicter(RolePerson):
     【目标】：利用自己的能力带领大家找出、驱逐所有狼人。\n
     【使用】：/查 号数"""
 
+    typeAlias: list[str] = ["预言家", "预", "predicter"]
+
     def getId(self) -> int:
         return 2
+
+    def getType(self) -> str:
+        return "预言家"
+
+    def getPriority(self) -> int:
+        return 20
 
     def getIntro(self) -> str:
         return """【角色】：预言家
@@ -116,8 +172,17 @@ class RolePredicter(RolePerson):
 【目标】：利用自己的能力带领大家找出、驱逐所有狼人。
 【使用】：/查 号数"""
 
-    def onNight(self) -> str | None:
-        return "请考虑查谁,不使用技能回复/不使用技能\neg:/查 阿拉伯数字"
+    def onNight(self, gameapi: GameBase, io: BotIO) -> str | None:
+        io.privateSend(
+            self.name,
+            "请考虑查谁,不使用技能回复/不使用技能\neg:/查 阿拉伯数字",
+        )
+        return True
+
+    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+        io.privateSend(
+            self.name, f"{args[0]} 归属于 {gameapi.getPlayerBelong(args[0])}"
+        )
 
 
 class RoleWitch(RolePerson):
@@ -125,7 +190,9 @@ class RoleWitch(RolePerson):
     【阵营】：好人阵营，神职\n
     【能力】：女巫拥有两瓶药，解药可以救活一名当晚被狼人杀害的玩家，毒药可以毒杀一名玩家，女巫每天晚上最多使用一瓶药，女巫不可自救。\n
     【目标】：善用毒药和解药，驱逐全部狼人出局。\n
-    【使用】：/毒 号数 /救 号数"""
+    【使用】：/技能 毒 号数 /技能 救 号数"""
+
+    typeAlias: list[str] = ["女巫", "女", "巫", "witch"]
 
     haveAntidote: bool = True
     havePoison: bool = True
@@ -133,24 +200,41 @@ class RoleWitch(RolePerson):
     def getId(self) -> int:
         return 3
 
+    def getPriority(self) -> int:
+        return 15
+
+    def getType(self) -> str:
+        return "女巫"
+
     def getIntro(self) -> str:
         return """【角色】：女巫
 【阵营】：好人阵营，神职
 【能力】：女巫拥有两瓶药，解药可以救活一名当晚被狼人杀害的玩家，毒药可以毒杀一名玩家，女巫每天晚上最多使用一瓶药，女巫不可自救。
 【目标】：善用毒药和解药，驱逐全部狼人出局。
-【使用】：/毒 号数 /救 号数"""
+【使用】：/技能 毒 号数 /技能 救"""
 
-    def onNight(self) -> str | None:
-        if self.havePoison:
-            return "请考虑毒谁,不使用技能回复/不使用技能\neg:/毒 阿拉伯数字"
-        return None
-
-    def onPeopleDeath(self, who: str) -> str | None:
+    def onNight(self, gameapi: GameBase, io: BotIO) -> bool:
         if self.haveAntidote:
+            who: str = gameapi.getDeadPlayer()
             if who == self.name:
-                return "刚才 你 死了,但你不能自救.请回复/不使用技能"
-            return f"刚才 {who} 死了,你要救吗?不使用技能回复/不使用技能\neg:/救"
-        return None
+                io.privateSend(self.name, "刚才 你 死了,但你不能自救.")
+            io.privateSend(
+                self.name,
+                f"刚才 {who} 死了,你要救吗? 要使用请回复 技能 救",
+            )
+        if self.havePoison:
+            io.privateSend(self.name, "你有一瓶毒药, 要使用请回复 技能 毒 阿拉伯数字")
+        return self.haveAntidote or self.havePoison
+
+    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+        if args[0] in ["救", "antidote", "save"]:
+            gameapi.playerSaved(gameapi.name2id(gameapi.getDeadPlayer()))
+            io.privateSend(self.name, f"你今晚救了 {gameapi.getDeadPlayer()}")
+        elif args[0] in ["毒", "poison"]:
+            gameapi.playerPoisoned(args[1])
+            io.privateSend(self.name, f"你今晚毒了 {args[1]}")
+        else:
+            raise ValueError
 
 
 class RoleGuard(RolePerson):
@@ -166,6 +250,9 @@ class RoleGuard(RolePerson):
     def getType(self) -> int:
         return "守卫"
 
+    def getPriority(self) -> int:
+        return 5
+
     def getIntro(self) -> str:
         return """【角色】：守卫
 【阵营】：好人阵营，神职
@@ -173,8 +260,11 @@ class RoleGuard(RolePerson):
 【目标】：守护关键好人，驱逐狼人获胜。
 【使用】：/守护 号数"""
 
-    def onNight(self) -> str | None:
-        return "请选择守护号数,不使用技能回复/不使用技能\neg:/守护 阿拉伯数字"
+    def onNight(self, gameapi: GameBase, io: BotIO) -> str | None:
+        io.privateSend(
+            self.name,
+            "请选择守护号数,不使用技能回复/不使用技能\neg:/守护 阿拉伯数字",
+        )
 
 
 class RoleKnight(RolePerson):
@@ -187,6 +277,9 @@ class RoleKnight(RolePerson):
     def getId(self) -> int:
         return 5
 
+    def getType(self) -> int:
+        return "骑士"
+
     def getIntro(self) -> str:
         return """【角色】：骑士
 【阵营】：好人阵营，神职
@@ -194,8 +287,11 @@ class RoleKnight(RolePerson):
 【目标】：在确定狼人的情况下，发动技能杀死狼人。
 【使用】：/决斗 号数"""
 
-    def onDay(self) -> str | None:
-        return "你可以在白天任意时候使用技能一次,请考虑决斗谁\neg:/决斗 阿拉伯数字"
+    def onDay(self, gameapi: GameBase, io: BotIO) -> str | None:
+        io.privateSend(
+            self.name,
+            "你可以在白天任意时候使用技能一次,请考虑决斗谁\neg:/决斗 阿拉伯数字",
+        )
 
 
 class RoleHunter(RolePerson):
@@ -208,6 +304,9 @@ class RoleHunter(RolePerson):
     def getId(self) -> int:
         return 6
 
+    def getType(self) -> int:
+        return "猎人"
+
     def getIntro(self) -> str:
         return """【角色】：猎人
 【阵营】：好人阵营，神职
@@ -215,10 +314,13 @@ class RoleHunter(RolePerson):
 【目标】：一命换一命，驱逐全部狼人出局。
 【使用】：/杀 号数"""
 
-    def onDeath(self, reason: str) -> str | None:
+    def onDeath(self, gameapi: GameBase, io: BotIO, reason: str) -> None:
         if reason in ["被刀了", "被票出了"]:
-            return "你已经死亡,请考虑枪谁,不使用技能回复/不使用技能\neg:/枪 阿拉伯数字"
-        return None
+            io.privateSend(
+                self.name,
+                "你已经死亡,请考虑枪谁,不使用技能回复/不使用技能\neg:/枪 阿拉伯数字",
+            )
+            self.canUseSkill = True
 
 
 class RoleBlackWolfKing(RoleWolf):
@@ -229,6 +331,9 @@ class RoleBlackWolfKing(RoleWolf):
 
     def getId(self) -> int:
         return 7
+
+    def getType(self) -> int:
+        return "黑狼王"
 
     def getIntro(self) -> str:
         return """【角色】：黑狼王
@@ -252,6 +357,9 @@ class RoleWhiteWolfKing(RoleWolf):
     def getId(self) -> int:
         return 8
 
+    def getType(self) -> int:
+        return "白狼王"
+
     def getIntro(self) -> str:
         return """【角色】：白狼王
 【阵营】：狼人阵营
@@ -259,8 +367,11 @@ class RoleWhiteWolfKing(RoleWolf):
 【目标】：白天装作好人混淆视听，夜晚袭击村民，霸占村庄。
 【使用】：/自爆 号数 (在白天任意时刻私聊使用)"""
 
-    def onDay(self) -> str | None:
-        return "你可以在白天任意时候自爆,请考虑自爆谁\neg:/自爆 阿拉伯数字"
+    def onDay(self, gameapi: GameBase, io: BotIO) -> str | None:
+        io.privateSend(
+            self.name,
+            "你可以在白天任意时候自爆,请考虑自爆谁\neg:/自爆 阿拉伯数字",
+        )
 
 
 # 鸽鸽鸽
@@ -273,6 +384,9 @@ class RoleHiddenWolf(RoleWolf):
 
     def getId(self) -> int:
         return 9
+
+    def getType(self) -> int:
+        return "隐狼"
 
     def getIntro(self) -> str:
         return """【角色】：隐狼
@@ -291,6 +405,9 @@ class RoleStupid(RolePerson):
 
     def getId(self) -> int:
         return 10
+
+    def getType(self) -> int:
+        return "白痴"
 
     def getIntro(self) -> str:
         return """【角色】：白痴
