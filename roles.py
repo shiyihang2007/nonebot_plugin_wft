@@ -244,6 +244,8 @@ class RoleGuard(RolePerson):
     【目标】：守护关键好人，驱逐狼人获胜。\n
     【使用】：/守护 号数"""
 
+    typeAlias: list[str] = ["守卫", "守", "guard"]
+
     def getId(self) -> int:
         return 4
 
@@ -274,6 +276,8 @@ class RoleKnight(RolePerson):
     【目标】：在确定狼人的情况下，发动技能杀死狼人。\n
     【使用】：/决斗 号数"""
 
+    typeAlias: list[str] = ["骑士", "骑", "knight"]
+
     def getId(self) -> int:
         return 5
 
@@ -300,6 +304,8 @@ class RoleHunter(RolePerson):
     【能力】：当且仅当猎人被狼人杀害或被投票放逐时，猎人可以亮出自己的身份牌并指定枪杀一名玩家，其它情况则无法发动技能。\n
     【目标】：一命换一命，驱逐全部狼人出局。\n
     【使用】：/杀 号数"""
+
+    typeAlias: list[str] = ["猎人", "猎", "hunter"]
 
     def getId(self) -> int:
         return 6
@@ -329,6 +335,8 @@ class RoleBlackWolfKing(RoleWolf):
     【能力】：属于狼人阵营，具有死后开枪技能。（殉情、自爆和被毒杀不能开枪）\n
     【目标】：白天装作好人混淆视听，夜晚袭击村民，霸占村庄。"""
 
+    typeAlias: list[str] = ["黑狼王", "黑狼", "blackwolf"]
+
     def getId(self) -> int:
         return 7
 
@@ -353,6 +361,8 @@ class RoleWhiteWolfKing(RoleWolf):
     【能力】：属于狼人阵营，白狼王可以在白天自爆的时候，选择带走一名玩家，非自爆出局不得发动技能。\n
     【目标】：白天装作好人混淆视听，夜晚袭击村民，霸占村庄。\n
     【使用】：/自爆 号数 (在白天任意时刻私聊使用)"""
+
+    typeAlias: list[str] = ["白狼王", "白狼", "whitewolf"]
 
     def getId(self) -> int:
         return 8
@@ -381,6 +391,8 @@ class RoleHiddenWolf(RoleWolf):
     【能力】：隐狼属于狼人阵营，不能自爆，被预言家查验结果始终为好人。隐狼夜间知道其他那些玩家是狼人，但不能同其他狼人一起刀人，狼队友也不知道隐狼身份。当其他狼同伴全部出局后，进入狼坑，获得刀人技能。\n
     【目标】：白天若被真预言家发金水且发言正常，可以基本坐实好人身份。\n
     请遵守游戏规则,不与队友对话!"""
+
+    typeAlias: list[str] = ["隐狼", "hiddenwolf"]
 
     def getId(self) -> int:
         return 9
