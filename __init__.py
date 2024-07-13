@@ -53,7 +53,7 @@ async def is_enabled(event: MessageEvent) -> bool:
 
 
 async def is_admin(bot: Bot, event: MessageEvent, state: T_State) -> bool:
-    if not await Rule(to_me())(bot, event, state):
+    if not await to_me()(bot, event, state):
         return False
     user_id: str = event.get_user_id()
     if isinstance(event, GroupMessageEvent):
