@@ -15,9 +15,10 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot import (
     CommandGroup,
 )
+from nonebot.typing import T_State
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
-from nonebot.rule import to_me
+from nonebot.rule import Rule, to_me
 from nonebot.log import logger
 
 # require("nonebot_plugin_datastore")
@@ -51,7 +52,9 @@ async def is_enabled(event: MessageEvent) -> bool:
     return True
 
 
-async def is_admin(bot: Bot, event: MessageEvent) -> bool:
+async def is_admin(bot: Bot, event: MessageEvent, state: T_State) -> bool:
+    if not await Rule(to_me())(bot, event, state):
+        return False
     user_id: str = event.get_user_id()
     if isinstance(event, GroupMessageEvent):
         group_id: str = str(event.group_id)
@@ -67,7 +70,7 @@ async def is_admin(bot: Bot, event: MessageEvent) -> bool:
     return False
 
 
-commandConfig = CommandGroup("wftconfig", rule=to_me() & is_admin)
+commandConfig = CommandGroup("wftconfig", rule=is_admin)
 commandEnable = commandConfig.command("enable", aliases={"启用"})
 commandDisable = commandConfig.command("disable", aliases={"禁用"})
 commandBan = commandConfig.command("ban", aliases={"拉黑"})
