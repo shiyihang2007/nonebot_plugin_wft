@@ -28,6 +28,9 @@ class GameBase:
     def playerPoisoned(self, id: int):
         raise NotImplementedError
 
+    def playerShot(self, id: int):
+        raise NotImplementedError
+
     def getDeadPlayer(self) -> str | None:
         raise NotImplementedError
 

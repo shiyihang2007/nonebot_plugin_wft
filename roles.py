@@ -21,6 +21,7 @@ class RoleBase:
     name: str
 
     isDeath: bool
+    canAction: bool
     canUseSkill: bool
 
     typeAlias: list[str] = []
@@ -29,6 +30,7 @@ class RoleBase:
         self.id = 0
         self.name = ""
         self.isDeath = False
+        self.canAction = False
         self.canUseSkill = False
 
     def getId(self) -> int:
@@ -74,8 +76,12 @@ class RoleBase:
     def onDeath(self, gameapi: GameBase, io: BotIO, reason: str) -> None:
         return None
 
+    def action(self, gameapi: GameBase, io: BotIO, *args) -> None:
+        """行动, 不检查 `self.canAction`"""
+        return None
+
     def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
-        """使用技能, 不检查 `self.canUseSkill`"""
+        """行动, 不检查 `self.canUseSkill`"""
         return None
 
 
@@ -142,7 +148,7 @@ class RoleWolf(RoleBase):
             )
             return True
 
-    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+    def action(self, gameapi: GameBase, io: BotIO, *args) -> None:
         gameapi.playerKilled(args[0])
         io.privateSend(self.name, f"你们今晚将会刀 {args[0]}")
 
@@ -179,7 +185,7 @@ class RolePredicter(RolePerson):
         )
         return True
 
-    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+    def action(self, gameapi: GameBase, io: BotIO, *args) -> None:
         io.privateSend(
             self.name, f"{args[0]} 归属于 {gameapi.getPlayerBelong(args[0])}"
         )
@@ -190,7 +196,7 @@ class RoleWitch(RolePerson):
     【阵营】：好人阵营，神职\n
     【能力】：女巫拥有两瓶药，解药可以救活一名当晚被狼人杀害的玩家，毒药可以毒杀一名玩家，女巫每天晚上最多使用一瓶药，女巫不可自救。\n
     【目标】：善用毒药和解药，驱逐全部狼人出局。\n
-    【使用】：/技能 毒 号数 /技能 救 号数"""
+    【使用】：/行动 毒 号数 /行动 救 号数"""
 
     typeAlias: list[str] = ["女巫", "女", "巫", "witch"]
 
@@ -211,7 +217,7 @@ class RoleWitch(RolePerson):
 【阵营】：好人阵营，神职
 【能力】：女巫拥有两瓶药，解药可以救活一名当晚被狼人杀害的玩家，毒药可以毒杀一名玩家，女巫每天晚上最多使用一瓶药，女巫不可自救。
 【目标】：善用毒药和解药，驱逐全部狼人出局。
-【使用】：/技能 毒 号数 /技能 救"""
+【使用】：/行动 毒 号数 /行动 救"""
 
     def onNight(self, gameapi: GameBase, io: BotIO) -> bool:
         if self.haveAntidote:
@@ -226,7 +232,7 @@ class RoleWitch(RolePerson):
             io.privateSend(self.name, "你有一瓶毒药, 要使用请回复 技能 毒 阿拉伯数字")
         return self.haveAntidote or self.havePoison
 
-    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+    def action(self, gameapi: GameBase, io: BotIO, *args) -> None:
         if args[0] in ["救", "antidote", "save"]:
             gameapi.playerSaved(gameapi.name2id(gameapi.getDeadPlayer()))
             io.privateSend(self.name, f"你今晚救了 {gameapi.getDeadPlayer()}")
@@ -303,7 +309,7 @@ class RoleHunter(RolePerson):
     【阵营】：好人阵营，神职\n
     【能力】：当且仅当猎人被狼人杀害或被投票放逐时，猎人可以亮出自己的身份牌并指定枪杀一名玩家，其它情况则无法发动技能。\n
     【目标】：一命换一命，驱逐全部狼人出局。\n
-    【使用】：/杀 号数"""
+    【使用】：/技能 号数"""
 
     typeAlias: list[str] = ["猎人", "猎", "hunter"]
 
@@ -318,15 +324,19 @@ class RoleHunter(RolePerson):
 【阵营】：好人阵营，神职
 【能力】：当且仅当猎人被狼人杀害或被投票放逐时，猎人可以亮出自己的身份牌并指定枪杀一名玩家，其它情况则无法发动技能。
 【目标】：一命换一命，驱逐全部狼人出局。
-【使用】：/杀 号数"""
+【使用】：/技能 号数"""
 
     def onDeath(self, gameapi: GameBase, io: BotIO, reason: str) -> None:
         if reason in ["被刀了", "被票出了"]:
             io.privateSend(
                 self.name,
-                "你已经死亡,请考虑枪谁,不使用技能回复/不使用技能\neg:/枪 阿拉伯数字",
+                "你已经死亡,请考虑枪谁,不使用技能回复/不使用技能\neg:/技能 阿拉伯数字",
             )
             self.canUseSkill = True
+
+    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+        gameapi.playerShot(args[0])
+        io.privateSend(self.name, f"你带走了 {args[0]}")
 
 
 class RoleBlackWolfKing(RoleWolf):
@@ -351,8 +361,12 @@ class RoleBlackWolfKing(RoleWolf):
 
     def onDeath(self, reason: str) -> str | None:
         if reason in ["被刀了", "被票出了"]:
-            return "你已经死亡,请考虑杀谁,不使用回复/杀 0\neg:/杀 阿拉伯数字"
+            return "你已经死亡,请考虑杀谁,不使用回复/不使用技能 0\neg:/技能 阿拉伯数字"
         return None
+
+    def useSkill(self, gameapi: GameBase, io: BotIO, *args) -> None:
+        gameapi.playerShot(args[0])
+        io.privateSend(self.name, f"你带走了 {args[0]}")
 
 
 class RoleWhiteWolfKing(RoleWolf):

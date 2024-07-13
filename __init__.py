@@ -150,7 +150,8 @@ commandShowroles = commandPrefix.command("showroles", aliases={"显示角色", "
 commandAutoroles = commandPrefix.command("autoroles", aliases={"自动角色", "自动"})
 commandStart = commandPrefix.command("start", aliases={"开始", "启动"})
 
-commandSkill = commandPrefix.command("skill", aliases={"技能", "药", "刀", "查", "救"})
+commandAction = commandPrefix.command("action", aliases={"行动", "药", "刀", "查"})
+commandSkill = commandPrefix.command("skill", aliases={"技能", "爆", "枪", "决斗"})
 commandSkip = commandPrefix.command("skip", aliases={"跳过", "过", "不使用技能"})
 
 
@@ -280,29 +281,29 @@ async def _(event: GroupMessageEvent, args: Message = CommandArg()):
         await commandStart.finish(error)
 
 
-@commandSkill.handle()
+@commandAction.handle()
 async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
     global games
     userId: str = event.get_user_id()
     try:
         myGame = [x for x in games.values() if userId in x.playerList][0]
     except:
-        await commandSkill.finish("你未加入游戏")
+        await commandAction.finish("你未加入游戏")
     try:
         role = [x for x in myGame.roleList if x.name == userId][0]
     except:
-        await commandSkill.finish("你还没有角色")
-    if not role.canUseSkill:
-        await commandSkill.finish("你还不能行动")
+        await commandAction.finish("你还没有角色")
+    if not role.canAction:
+        await commandAction.finish("你还不能行动")
     try:
-        role.useSkill(
+        role.action(
             games[myGame.groupId],
             games[myGame.groupId].io,
             args.extract_plain_text().split(" "),
         )
     except ValueError:
-        await commandSkill.finish("非法的参数值")
-    role.canUseSkill = False
+        await commandAction.finish("非法的参数值")
+    role.canAction = False
     if error := myGame._nightActions():
         if error[-1:-3] == "获胜":
             await games[myGame.groupId].endsUp()
@@ -316,15 +317,18 @@ async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
     try:
         myGame = [x for x in games.values() if userId in x.playerList][0]
     except:
-        await commandSkill.finish("你未加入游戏")
+        await commandAction.finish("你未加入游戏")
     try:
         role = [x for x in myGame.roleList if x.name == userId][0]
     except:
-        await commandSkill.finish("你还没有角色")
-    if not role.canUseSkill:
-        await commandSkill.finish("你还不能行动")
-    role.canUseSkill = False
-    if error := myGame._nightActions():
-        if error[-1:-3] == "获胜":
-            await games[myGame.groupId].endsUp()
-            del games[myGame.groupId]
+        await commandAction.finish("你还没有角色")
+    if role.canAction:
+        role.canAction = False
+        if error := myGame._nightActions():
+            if error[-1:-3] == "获胜":
+                await games[myGame.groupId].endsUp()
+                del games[myGame.groupId]
+    elif role.canUseSkill:
+        role.canUseSkill = False
+    else:
+        await commandAction.finish("你还不能操作")
