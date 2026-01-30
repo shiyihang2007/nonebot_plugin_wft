@@ -6,7 +6,6 @@ from .botio import BotIO
 
 
 class Game(GameBase):
-
     groupId: str = ""
     io: BotIO
 
@@ -16,7 +15,7 @@ class Game(GameBase):
     """ value: 角色对象 """
     deathList: list[int] = []
     """ value: 死亡的用户编号 """
-    deathReason: dict[str, str] = []
+    deathReason: dict[str, str] = {}
     """ key: 用户id; value: 死亡原因 """
 
     killEdge: bool = False
@@ -48,20 +47,20 @@ class Game(GameBase):
     def name2id(self, name: str) -> int:
         return self.playerList.index(name)
 
-    def id2name(self, id: str) -> str:
-        return self.playerList[id]
+    def id2name(self, uid: int) -> str:
+        return self.playerList[uid]
 
-    def playerKilled(self, id: int):
-        self.deathList.append(id)
-        self.deathReason[self.id2name(id)] = "被刀了"
+    def playerKilled(self, uid: int):
+        self.deathList.append(uid)
+        self.deathReason[self.id2name(uid)] = "被刀了"
 
-    def playerSaved(self, id: int):
-        self.deathList.remove(id)
-        del self.deathReason[self.id2name]
+    def playerSaved(self, uid: int):
+        self.deathList.remove(uid)
+        del self.deathReason[self.id2name(uid)]
 
-    def playerPoisoned(self, id: int):
-        self.deathList.append(id)
-        self.deathReason[self.id2name(id)] = "被毒死了"
+    def playerPoisoned(self, uid: int):
+        self.deathList.append(uid)
+        self.deathReason[self.id2name(uid)] = "被毒死了"
 
     def getGroupId(self) -> str:
         return self.groupId
@@ -129,17 +128,17 @@ class Game(GameBase):
         self.io.groupSend(self.groupId, "天黑请闭眼")
         for x in self.roleList:
             x.canUseSkill = False
-        if error := self._nightActions():
+        if error := self.nightActions():
             return error
 
-    def _nightActions(self) -> str | None:
+    def nightActions(self) -> str | None:
         if self.i < len(self.roleList):
             if self.roleList[self.roleActionList[self.i]].onNight():
                 self.roleList[self.roleActionList[self.i]].canUseSkill = True
                 self.i += 1
             else:
                 self.i += 1
-                self._nightActions()
+                self.nightActions()
         else:
             if error := self.onDay():
                 return error
@@ -216,7 +215,7 @@ class Game(GameBase):
         elif not bads and not others:
             return "好人获胜"
         elif others and not goods and not bads:
-            return f"{[f"[CQ:at,qq={x}]" for x in others]} 获胜"
+            return f"{[f'[CQ:at,qq={x}]' for x in others]} 获胜"
 
     def endsUp(self) -> str | None:
         self.io.groupSend(

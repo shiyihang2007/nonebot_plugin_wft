@@ -6,33 +6,32 @@
 
 
 class GameBase:
-
     def name2id(self, name: str) -> int:
         raise NotImplementedError
 
-    def id2name(self, id: str) -> str:
+    def id2name(self, uid: int) -> str:
         raise NotImplementedError
 
     def getGroupId(self) -> str:
         raise NotImplementedError
 
-    def playerProtected(self, id: int):
+    def playerProtected(self, uid: int):
         raise NotImplementedError
 
-    def playerKilled(self, id: int):
+    def playerKilled(self, uid: int):
         raise NotImplementedError
 
-    def playerSaved(self, id: int):
+    def playerSaved(self, uid: int):
         raise NotImplementedError
 
-    def playerPoisoned(self, id: int):
+    def playerPoisoned(self, uid: int):
         raise NotImplementedError
 
-    def playerShot(self, id: int):
+    def playerShot(self, uid: int):
         raise NotImplementedError
 
     def getDeadPlayer(self) -> str | None:
         raise NotImplementedError
 
-    def getPlayerBelong(self, id: int) -> str:
+    def getPlayerBelong(self, uid: int) -> str:
         raise NotImplementedError
