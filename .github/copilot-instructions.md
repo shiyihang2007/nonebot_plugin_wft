@@ -15,9 +15,9 @@ Room → EventSystem → Events (night_start, day_start, vote_start, person_kill
 ```
 
 **Key Files:**
-- [game/events/event_system.py](../game/events/event_system.py) - Central event dispatcher per room
-- [game/events/event_base.py](../game/events/event_base.py) - Event trigger mechanism with listener chain
-- [game/events/listener.py](../game/events/listener.py) - Listener callback signature (room, user_id, args)
+- [game/event_system.py](../game/event_system.py) - Central event dispatcher per room
+- [game/event_base.py](../game/event_base.py) - Event trigger mechanism with listener chain
+- [game/listener.py](../game/listener.py) - Listener callback signature (room, user_id, args)
 
 ### Room-Based Isolation
 Each game session is a separate `Room` instance:
@@ -34,11 +34,11 @@ Room {
 **Key Pattern:** Always access players via `player_list[index]` for game logic (preserves turn order), but use `id_2_player[qq_id]` for user lookups.
 
 ### Character-Role System
-- **Dynamic Loading:** Character classes auto-loaded from `game/characters/` at initialization
+- **Dynamic Loading:** Character classes auto-loaded by scanning `game/` for modules prefixed with `character_` at initialization
 - **Registration Pattern:** Characters register event listeners when instantiated during game start
-- **Base Class:** [game/characters/character_base.py](../game/characters/character_base.py)
+- **Base Class:** [game/character_base.py](../game/character_base.py)
 
-Example implementation path: Create new role classes in `game/characters/character_[role_name].py`, inherit from `CharacterBase`, register event listeners in `__init__`.
+Example implementation path: Create new role classes in `game/character_[role_name].py`, inherit from `CharacterBase`, register event listeners in `__init__`.
 
 ## Plugin Integration Points
 
@@ -66,13 +66,13 @@ Commands map to game events:
 ## Developer Workflow & Patterns
 
 ### Adding a New Character Role
-1. Create [game/characters/character_[name].py](../game/characters/)
+1. Create `game/character_[name].py`
 2. Inherit from `CharacterBase`
 3. Register event listeners in `__init__` that call methods on the room/player objects
-4. Add to `character_modules` in [game/room.py](../game/room.py#L9) (auto-loaded)
+4. Ensure the filename starts with `character_` (auto-loaded by prefix scan)
 
 ### Adding a New Game Phase Event
-1. Add `self.event_[phase_name] = EventBase()` in [EventSystem.__init__](../game/events/event_system.py)
+1. Add `self.event_[phase_name] = EventBase()` in [EventSystem.__init__](../game/event_system.py)
 2. Call `room.events_system.event_[phase_name].active(room, user_id, args)` to trigger
 3. Characters register listeners via `room.events_system.event_[phase_name].listeners.append(listener_func)`
 
@@ -90,7 +90,7 @@ Commands map to game events:
 - **Async Context:** Bot integration is async; game logic should be sync where possible
 
 ## Import Structure
-- Relative imports within `game/` module (e.g., `from .characters.character_base import CharacterBase`)
+- Relative imports within `game/` module (e.g., `from .character_base import CharacterBase`)
 - Absolute imports from NoneBot: `from nonebot.adapters.onebot.v11 import Bot, Message, ...`
 
 ## Testing & Debugging Tips
