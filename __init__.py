@@ -17,23 +17,10 @@ from nonebot.params import CommandArg
 from nonebot.rule import to_me
 from nonebot.log import logger
 
-from .game import Game
-from .botio import BotIO
-from . import roles
+from .game.room import Room
 
 # require("nonebot_plugin_datastore")
 # from nonebot_plugin_datastore import PluginData
-
-
-def get_classes_in_module(module: object):
-    """动态编程黑魔法, 用来获取模块中的所有类"""
-    classes = []
-    for name in dir(module):
-        member = getattr(module, name)
-        if isinstance(member, type):
-            classes.append(member)
-    return classes
-
 
 ban_user: dict[str, set[str]] = dict()
 enabled_groups: set[str] = set()
@@ -185,123 +172,100 @@ CommandSkill = commandPrefix.command("skill", aliases={"技能", "爆", "枪", "
 CommandSkip = commandPrefix.command("skip", aliases={"跳过", "过", "不使用技能"})
 
 
-games: dict[str, Game] = {}
+rooms: dict[str, Room] = {}
 
 
 @CommandInit.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
     group_id: str = str(event.group_id)
-    if group_id in games and games[group_id]:
+    if group_id in rooms and rooms[group_id]:
         await CommandInit.finish("请先结束上一局游戏. ")
-    games[group_id] = Game(group_id, BotIO(bot))
+    rooms[group_id] = Room(group_id, bot.send_group_msg, bot.send_private_msg)
     await CommandInit.finish("游戏已创建")
 
 
 @CommandEnd.handle()
 async def _(event: GroupMessageEvent):
     group_id: str = str(event.group_id)
-    if group_id not in games or not games[group_id]:
+    if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
-    games[group_id].endsUp()
-    del games[group_id]
+    del rooms[group_id]
     await CommandEnd.finish("游戏已结束")
 
 
 @CommandJoin.handle()
 async def _(event: GroupMessageEvent):
     group_id: str = str(event.group_id)
-    if group_id not in games or not games[group_id]:
+    if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
-    player_id: str = event.get_user_id()
-    if player_id in games[group_id].playerList:
+    user_id: str = event.get_user_id()
+    if user_id in rooms[group_id].id_2_player:
         await CommandJoin.finish("不能重复加入游戏")
-    games[group_id].addPlayer(player_id)
-    await CommandJoin.finish(Message(f"[CQ:at,qq={str(int(player_id))}] 已加入游戏"))
+    await rooms[group_id].add_player(user_id)
+    await CommandJoin.finish(Message(f"[CQ:at,qq={str(int(user_id))}] 已加入游戏"))
 
 
 @CommandExit.handle()
 async def _(event: GroupMessageEvent):
     group_id: str = str(event.group_id)
-    if group_id not in games or not games[group_id]:
+    if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
-    player_id: str = event.get_user_id()
-    games[group_id].removePlayer(games[group_id].playerList.index(player_id))
-    await CommandExit.finish(Message(f"[CQ:at,qq={str(int(player_id))}] 已离开游戏"))
+    user_id: str = event.get_user_id()
+    await rooms[group_id].remove_player(user_id)
+    await CommandExit.finish(Message(f"[CQ:at,qq={str(int(user_id))}] 已离开游戏"))
 
 
 @CommandAddrole.handle()
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     group_id: str = str(event.group_id)
-    if group_id not in games or not games[group_id]:
+    if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
     role_list = args.extract_plain_text().split(" ")
-    role_classes: list[type[roles.RoleBase]] = [
-        x for x in get_classes_in_module(roles) if issubclass(x, roles.RoleBase)
-    ]
-    for role_name in role_list:
-        tps: list[roles.RoleBase] = [
-            x() for x in role_classes if role_name in x.typeAlias
-        ]
-        if len(tps) > 1:
-            logger.warning(
-                f"Other items with the same name ({role_name}) are ignored. e.g.{tps[1:]}"
-            )
-        if len(tps) == 0:
-            await CommandAutoroles.send(f"非法的角色名 {role_name}")
-            continue
-        games[group_id].addRole(tps[0])
-        await CommandAddrole.send(f"已添加角色 {tps[0].getType()}")
+    await rooms[group_id].add_character(role_list)
 
 
 @CommandRmrole.handle()
 async def _(event: GroupMessageEvent, args: Message = CommandArg()):
     group_id: str = str(event.group_id)
-    if group_id not in games or not games[group_id]:
+    if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
     role_list: list[str] = args.extract_plain_text().split(" ")
-    for role_name in role_list:
-        pos = -1
-        if role_name.isdigit():
-            pos = int(role_name)
-        else:
-            for i in range(len(games[group_id].roleList)):
-                if role_name in games[group_id].roleList[i].typeAlias:
-                    pos = i
-        if pos != -1:
-            tp = games[group_id].roleList[pos].getType()
-            games[group_id].removeRole(pos)
-            await CommandAddrole.send(f"已删除角色 {tp}")
-        await CommandAddrole.send(f"角色 {role_name} 不存在")
+    await rooms[group_id].remove_character(role_list)
+
+
+# TODO: Refactor following codes
+
+"""
 
 
 @CommandShowroles.handle()
 async def _(event: GroupMessageEvent):
     group_id: str = str(event.group_id)
-    if group_id not in games or not games[group_id]:
+    if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
     await CommandShowroles.send(
-        f"角色列表: {[x.getType() for x in games[group_id].roleList]}"
+        f"角色列表: {[x.getType() for x in rooms[group_id].roleList]}"
     )
 
 
 @CommandAutoroles.handle()
 async def _(event: GroupMessageEvent):
     group_id: str = str(event.group_id)
-    if group_id not in games or not games[group_id]:
+    if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
-    if error := games[group_id].useDefaultRoleLists():
+    if error := rooms[group_id].useDefaultRoleLists():
         await CommandAutoroles.finish(error)
 
 
 @CommandStart.handle()
 async def _(event: GroupMessageEvent):
     group_id: str = str(event.group_id)
-    if group_id not in games or not games[group_id]:
+    if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
-    if error := games[group_id].start():
+    if error := rooms[group_id].start():
         if error[-1:-3] == "获胜":
-            games[group_id].endsUp()
-            del games[group_id]
+            rooms[group_id].endsUp()
+            del rooms[group_id]
         await CommandStart.finish(error)
 
 
@@ -309,7 +273,7 @@ async def _(event: GroupMessageEvent):
 async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
     user_id: str = event.get_user_id()
     try:
-        my_game = [x for x in games.values() if user_id in x.playerList][0]
+        my_game = [x for x in rooms.values() if user_id in x.playerList][0]
     except IndexError:
         await CommandAction.finish("你未加入游戏")
     try:
@@ -320,8 +284,8 @@ async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
         await CommandAction.finish("你还不能行动")
     try:
         role.action(
-            games[my_game.groupId],
-            games[my_game.groupId].io,
+            rooms[my_game.groupId],
+            rooms[my_game.groupId].io,
             args.extract_plain_text().split(" "),
         )
     except ValueError:
@@ -329,15 +293,15 @@ async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
     role.canAction = False
     if error := my_game.nightActions():
         if error[-1:-3] == "获胜":
-            games[my_game.groupId].endsUp()
-            del games[my_game.groupId]
+            rooms[my_game.groupId].endsUp()
+            del rooms[my_game.groupId]
 
 
 @CommandSkip.handle()
 async def _(event: PrivateMessageEvent):
     user_id: str = event.get_user_id()
     try:
-        my_game = [x for x in games.values() if user_id in x.playerList][0]
+        my_game = [x for x in rooms.values() if user_id in x.playerList][0]
     except IndexError:
         await CommandAction.finish("你未加入游戏")
     try:
@@ -348,9 +312,10 @@ async def _(event: PrivateMessageEvent):
         role.canAction = False
         if error := my_game.nightActions():
             if error[-1:-3] == "获胜":
-                games[my_game.groupId].endsUp()
-                del games[my_game.groupId]
+                rooms[my_game.groupId].endsUp()
+                del rooms[my_game.groupId]
     elif role.canUseSkill:
         role.canUseSkill = False
     else:
         await CommandAction.finish("你还不能操作")
+"""
