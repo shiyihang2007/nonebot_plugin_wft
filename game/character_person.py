@@ -1,9 +1,14 @@
-from character_base import CharacterBase
-from room import Room
+"""Villager role (no active skills)."""
+
+from __future__ import annotations
+
+from .character_base import CharacterBase
 
 
 class CharacterPerson(CharacterBase):
-    aliases = ["person", "人", "民"]
+    """村民：无主动技能。"""
 
-    def __init__(self, room: Room) -> None:
-        pass
+    role_id = "person"
+    name = "村民"
+    camp = "good"
+    aliases = ["person", "人", "民", "村民"]

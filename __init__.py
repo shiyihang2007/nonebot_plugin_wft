@@ -1,13 +1,20 @@
 """
 nonebot_plugin_wft
+
+A room-based Werewolf ("狼人杀") game plugin for NoneBot2 + OneBot v11.
+
+Notes
+- 游戏以群为单位创建房间；私聊用于夜晚技能等隐私操作（`wft.skill ...`、`wft.skip`）。
+- 大部分指令仅允许在群聊中使用（例如 init/join/start/vote）。
 """
+
+from __future__ import annotations
 
 from nonebot.adapters.onebot.v11 import (
     Bot,
     Message,
     MessageEvent,
     GroupMessageEvent,
-    PrivateMessageEvent,
 )
 from nonebot import (
     CommandGroup,
@@ -15,20 +22,23 @@ from nonebot import (
 from nonebot.typing import T_State
 from nonebot.params import CommandArg
 from nonebot.rule import to_me
-from nonebot.log import logger
 
 from .game.room import Room
+from .game.character_wolf import CharacterWolf
+from .game.character_seer import CharacterSeer
 
 # require("nonebot_plugin_datastore")
 # from nonebot_plugin_datastore import PluginData
 
-ban_user: dict[str, set[str]] = dict()
+ban_user: dict[str, set[str]] = {}
 enabled_groups: set[str] = set()
 
 
 async def is_enabled(event: MessageEvent) -> bool:
-    """
-    is_enabled 判断插件是否启用
+    """Rule: whether the plugin should respond to this event.
+
+    - Group: enabled only if group_id is whitelisted and caller is not banned.
+    - Private: allowed (handlers should still validate which commands are allowed in PM).
     """
     user_id: str = event.get_user_id()
     if isinstance(event, GroupMessageEvent):
@@ -38,21 +48,19 @@ async def is_enabled(event: MessageEvent) -> bool:
             # 不回复黑名单用户
             return group_id not in ban_user or user_id not in ban_user[group_id]
         return False
-    # 启用私聊
+    # 启用私聊（用于夜晚技能等隐私操作）
     return True
 
 
 async def is_admin(bot: Bot, event: MessageEvent, state: T_State) -> bool:
-    """
-    is_admin 判断调用者是否为管理
-    """
+    """Rule: group admin only (owner/admin), must @bot."""
     if not await to_me()(bot, event, state):
         return False
     user_id: str = event.get_user_id()
     if isinstance(event, GroupMessageEvent):
-        group_id: str = str(event.group_id)
         user_info: dict = await bot.call_api(
-            "get_group_member_info", **{"group_id": group_id, "user_id": user_id}
+            "get_group_member_info",
+            **{"group_id": event.group_id, "user_id": int(user_id)},
         )
         user_role: str = user_info["role"]
         # 只允许管理员使用
@@ -96,29 +104,22 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     group_id = str(event.group_id)
     if group_id not in enabled_groups:
         await CommandBan.finish(f"群聊 {group_id} 不在白名单中")
+
+    group_ban_user = ban_user.setdefault(group_id, set())
     for user_id in ban_users:
-        if user_id in ban_user[group_id]:
-            await CommandBan.send(
-                f"""{
-                    (
-                        await bot.call_api(
-                            "get_group_member_info",
-                            **{"group_id": group_id, "user_id": user_id},
-                        )
-                    )["nickname"]
-                } 已在群聊 {group_id} 的黑名单中"""
+        nickname = (
+            await bot.call_api(
+                "get_group_member_info",
+                **{"group_id": event.group_id, "user_id": int(user_id)},
             )
-        ban_user[group_id].add(user_id)
-        await CommandBan.send(
-            f"""在群聊 {group_id} 中拉黑了 {
-                (
-                    await bot.call_api(
-                        "get_group_member_info",
-                        **{"group_id": group_id, "user_id": user_id},
-                    )
-                )["nickname"]
-            }"""
-        )
+        )["nickname"]
+
+        if user_id in group_ban_user:
+            await CommandBan.send(f"{nickname} 已在群聊 {group_id} 的黑名单中")
+            continue
+
+        group_ban_user.add(user_id)
+        await CommandBan.send(f"在群聊 {group_id} 中拉黑了 {nickname}")
 
 
 @CommandUnban.handle()
@@ -129,29 +130,22 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
     group_id = str(event.group_id)
     if group_id not in enabled_groups:
         await CommandUnban.finish(f"群聊 {group_id} 不在白名单中")
+
+    group_ban_user = ban_user.setdefault(group_id, set())
     for user_id in unban_users:
-        if user_id not in ban_user[group_id]:
-            await CommandUnban.send(
-                f"""{
-                    (
-                        await bot.call_api(
-                            "get_group_member_info",
-                            **{"group_id": group_id, "user_id": user_id},
-                        )
-                    )["nickname"]
-                } 不在群聊 {group_id} 的黑名单中"""
+        nickname = (
+            await bot.call_api(
+                "get_group_member_info",
+                **{"group_id": event.group_id, "user_id": int(user_id)},
             )
-        ban_user[group_id].remove(user_id)
-        await CommandUnban.send(
-            f"""在群聊 {group_id} 中解禁了 {
-                (
-                    await bot.call_api(
-                        "get_group_member_info",
-                        **{"group_id": group_id, "user_id": user_id},
-                    )
-                )["nickname"]
-            }"""
-        )
+        )["nickname"]
+
+        if user_id not in group_ban_user:
+            await CommandUnban.send(f"{nickname} 不在群聊 {group_id} 的黑名单中")
+            continue
+
+        group_ban_user.remove(user_id)
+        await CommandUnban.send(f"在群聊 {group_id} 中解禁了 {nickname}")
 
 
 commandPrefix = CommandGroup("wft", rule=is_enabled)
@@ -167,25 +161,105 @@ CommandShowroles = commandPrefix.command("showroles", aliases={"显示角色", "
 CommandAutoroles = commandPrefix.command("autoroles", aliases={"自动角色", "自动"})
 CommandStart = commandPrefix.command("start", aliases={"开始", "启动"})
 
-CommandAction = commandPrefix.command("action", aliases={"行动", "药", "刀", "查"})
-CommandSkill = commandPrefix.command("skill", aliases={"技能", "爆", "枪", "决斗"})
-CommandSkip = commandPrefix.command("skip", aliases={"跳过", "过", "不使用技能"})
+CommandSkill = commandPrefix.command("skill", aliases={"用", "技能", "用技能"})
+CommandVote = commandPrefix.command("vote", aliases={"投", "投票"})
+CommandSkip = commandPrefix.command(
+    "skip", aliases={"跳过", "过", "不用", "不使用技能"}
+)
 
 
 rooms: dict[str, Room] = {}
 
 
+def _resolve_room_for_private_user(
+    user_id: str,
+) -> tuple[str | None, Room | None, str | None]:
+    """Pick a room for a user issuing a private-message command.
+
+    A user may theoretically be in multiple rooms across groups. In that case we:
+    - Prefer the only room currently in "night" state (common for private skills)
+    - Otherwise report ambiguity and ask the user to specify a target group id
+    """
+
+    candidates: list[tuple[str, Room]] = [
+        (gid, room)
+        for gid, room in rooms.items()
+        if user_id in room.id_2_player and room.state != "ended"
+    ]
+    if not candidates:
+        return None, None, "你不在任何进行中的游戏中。"
+    if len(candidates) == 1:
+        return candidates[0][0], candidates[0][1], None
+
+    night_candidates = [c for c in candidates if c[1].state == "night"]
+    if len(night_candidates) == 1:
+        return night_candidates[0][0], night_candidates[0][1], None
+
+    group_list = ", ".join(gid for gid, _ in candidates)
+    return (
+        None,
+        None,
+        "你同时在多个群的游戏中"
+        f"({group_list}), 请指定群号。\n"
+        "示例: `wft.skill -g <群号> <动作> [参数]` / `wft.skill <群号> <动作> [参数]`；"
+        "`wft.skip -g <群号>` / `wft.skip <群号>`",
+    )
+
+
+def _extract_group_id_hint(
+    tokens: list[str],
+) -> tuple[str | None, list[str], str | None]:
+    """Extract optional group_id hint from the beginning of a token list.
+
+    Supported syntaxes (primarily for private-message commands):
+    - `wft.skill -g <群号> ...`
+    - `wft.skip -g <群号>`
+    - `wft.skill <群号> ...`  (only if the number looks like a group id)
+    - `wft.skip <群号>`
+    """
+
+    if not tokens:
+        return None, tokens, None
+
+    if tokens[0] in {"-g", "--group"}:
+        if len(tokens) < 2 or not tokens[1].isdigit():
+            return None, tokens, "用法：`wft.skill -g <群号> <动作> [参数]`"
+        return tokens[1], tokens[2:], None
+
+    if tokens[0].isdigit() and (tokens[0] in rooms or len(tokens[0]) >= 5):
+        return tokens[0], tokens[1:], None
+
+    return None, tokens, None
+
+
 @CommandInit.handle()
-async def _(bot: Bot, event: GroupMessageEvent):
+async def _(bot: Bot, event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandInit.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id in rooms and rooms[group_id]:
-        await CommandInit.finish("请先结束上一局游戏. ")
+        old_room = rooms[group_id]
+        if old_room.state != "ended":
+            await CommandInit.finish("请先结束上一局游戏. ")
+
+        # Game ended: create a fresh room but keep last game's player list + role config.
+        new_room = Room(group_id, bot.send_group_msg, bot.send_private_msg)
+        for p in old_room.player_list:
+            await new_room.add_player(p.user_id)
+        new_room.character_enabled = dict(old_room.character_enabled)
+        new_room.settings = dict(old_room.settings)
+
+        rooms[group_id] = new_room
+        await CommandInit.finish("上一局已结束，已创建新房间（保留玩家与角色配置）。")
+
     rooms[group_id] = Room(group_id, bot.send_group_msg, bot.send_private_msg)
     await CommandInit.finish("游戏已创建")
 
 
 @CommandEnd.handle()
-async def _(event: GroupMessageEvent):
+async def _(event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandEnd.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id not in rooms or not rooms[group_id]:
         await CommandEnd.finish("没有正在进行的游戏. ")
@@ -194,10 +268,14 @@ async def _(event: GroupMessageEvent):
 
 
 @CommandJoin.handle()
-async def _(event: GroupMessageEvent):
+async def _(event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandJoin.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id not in rooms or not rooms[group_id]:
-        await CommandEnd.finish("没有正在进行的游戏. ")
+        await CommandJoin.finish("没有正在进行的游戏. ")
+    if rooms[group_id].state != "lobby":
+        await CommandJoin.finish("游戏已开始，无法中途加入。")
     user_id: str = event.get_user_id()
     if user_id in rooms[group_id].id_2_player:
         await CommandJoin.finish("不能重复加入游戏")
@@ -206,116 +284,213 @@ async def _(event: GroupMessageEvent):
 
 
 @CommandExit.handle()
-async def _(event: GroupMessageEvent):
+async def _(event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandExit.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id not in rooms or not rooms[group_id]:
-        await CommandEnd.finish("没有正在进行的游戏. ")
+        await CommandExit.finish("没有正在进行的游戏. ")
+    if rooms[group_id].state != "lobby":
+        await CommandExit.finish("游戏已开始，无法中途退出。")
     user_id: str = event.get_user_id()
     await rooms[group_id].remove_player(user_id)
     await CommandExit.finish(Message(f"[CQ:at,qq={str(int(user_id))}] 已离开游戏"))
 
 
 @CommandAddrole.handle()
-async def _(event: GroupMessageEvent, args: Message = CommandArg()):
+async def _(event: MessageEvent, args: Message = CommandArg()):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandAddrole.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id not in rooms or not rooms[group_id]:
-        await CommandEnd.finish("没有正在进行的游戏. ")
+        await CommandAddrole.finish("没有正在进行的游戏. ")
+    if rooms[group_id].state != "lobby":
+        await CommandAddrole.finish("游戏已开始，无法修改角色配置。")
     role_list = args.extract_plain_text().split(" ")
     await rooms[group_id].add_character(role_list)
 
 
 @CommandRmrole.handle()
-async def _(event: GroupMessageEvent, args: Message = CommandArg()):
+async def _(event: MessageEvent, args: Message = CommandArg()):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandRmrole.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id not in rooms or not rooms[group_id]:
-        await CommandEnd.finish("没有正在进行的游戏. ")
+        await CommandRmrole.finish("没有正在进行的游戏. ")
+    if rooms[group_id].state != "lobby":
+        await CommandRmrole.finish("游戏已开始，无法修改角色配置。")
     role_list: list[str] = args.extract_plain_text().split(" ")
     await rooms[group_id].remove_character(role_list)
 
 
-# TODO: Refactor following codes
-
-"""
-
-
 @CommandShowroles.handle()
-async def _(event: GroupMessageEvent):
+async def _(event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandShowroles.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id not in rooms or not rooms[group_id]:
-        await CommandEnd.finish("没有正在进行的游戏. ")
-    await CommandShowroles.send(
-        f"角色列表: {[x.getType() for x in rooms[group_id].roleList]}"
-    )
+        await CommandShowroles.finish("没有正在进行的游戏. ")
+    room = rooms[group_id]
+    if not room.character_enabled:
+        await CommandShowroles.finish("当前未添加任何角色（未配置将默认补足为村民）。")
+    lines: list[str] = []
+    for role_cls, count in room.character_enabled.items():
+        name = getattr(role_cls, "name", role_cls.__name__)
+        lines.append(f"{name}: {count}")
+    await CommandShowroles.finish("\n".join(lines))
 
 
 @CommandAutoroles.handle()
-async def _(event: GroupMessageEvent):
+async def _(event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandAutoroles.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id not in rooms or not rooms[group_id]:
-        await CommandEnd.finish("没有正在进行的游戏. ")
-    if error := rooms[group_id].useDefaultRoleLists():
-        await CommandAutoroles.finish(error)
+        await CommandAutoroles.finish("没有正在进行的游戏. ")
+    room = rooms[group_id]
+    if room.state != "lobby":
+        await CommandAutoroles.finish("游戏已开始，无法修改角色配置。")
+    n = len(room.player_list)
+    if n < 4:
+        await CommandAutoroles.finish("玩家人数不足（至少 4 人）。")
+
+    # A simple common setup: 1 seer; wolves grow with player count; rest are villagers.
+    if n <= 5:
+        wolves = 1
+    elif n <= 8:
+        wolves = 2
+    elif n <= 11:
+        wolves = 3
+    else:
+        wolves = 4
+
+    room.character_enabled.clear()
+    room.character_enabled[CharacterWolf] = wolves
+    room.character_enabled[CharacterSeer] = 1
+    await CommandAutoroles.finish(
+        f"已自动配置角色：狼人 x{wolves}，预言家 x1，其余为村民。"
+    )
 
 
 @CommandStart.handle()
-async def _(event: GroupMessageEvent):
+async def _(event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandStart.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     if group_id not in rooms or not rooms[group_id]:
-        await CommandEnd.finish("没有正在进行的游戏. ")
-    if error := rooms[group_id].start():
-        if error[-1:-3] == "获胜":
-            rooms[group_id].endsUp()
-            del rooms[group_id]
-        await CommandStart.finish(error)
+        await CommandStart.finish("没有正在进行的游戏. ")
+    await rooms[group_id].start_game()
 
 
-@CommandAction.handle()
-async def _(event: PrivateMessageEvent, args: Message = CommandArg()):
-    user_id: str = event.get_user_id()
-    try:
-        my_game = [x for x in rooms.values() if user_id in x.playerList][0]
-    except IndexError:
-        await CommandAction.finish("你未加入游戏")
-    try:
-        role = [x for x in my_game.roleList if x.name == user_id][0]
-    except IndexError:
-        await CommandAction.finish("你还没有角色")
-    if not role.canAction:
-        await CommandAction.finish("你还不能行动")
-    try:
-        role.action(
-            rooms[my_game.groupId],
-            rooms[my_game.groupId].io,
-            args.extract_plain_text().split(" "),
+@CommandSkill.handle()
+async def _(event: MessageEvent, args: Message = CommandArg()):
+    user_id = event.get_user_id()
+
+    raw_tokens = [x for x in args.extract_plain_text().strip().split() if x]
+    hinted_group_id, arg_list, err = _extract_group_id_hint(raw_tokens)
+    if err:
+        await CommandSkill.finish(err)
+
+    room: Room | None = None
+    if isinstance(event, GroupMessageEvent):
+        group_id = str(event.group_id)
+        if hinted_group_id and hinted_group_id != group_id:
+            await CommandSkill.finish(
+                "请在对应群聊中使用该指令（群号与当前群不一致）。"
+            )
+        if group_id not in rooms or not rooms[group_id]:
+            await CommandSkill.finish("没有正在进行的游戏. ")
+        room = rooms[group_id]
+        if room.state == "ended":
+            await CommandSkill.finish("该群的游戏已结束，请先 `wft.init`。")
+    else:
+        if hinted_group_id:
+            group_id = hinted_group_id
+            room = rooms.get(group_id)
+            if not room:
+                await CommandSkill.finish(f"群聊 {group_id} 没有正在进行的游戏。")
+            if room.state == "ended":
+                await CommandSkill.finish("该群的游戏已结束，请先 `wft.init`。")
+            if user_id not in room.id_2_player:
+                await CommandSkill.finish("你不在该群的游戏中。")
+        else:
+            group_id, room, err = _resolve_room_for_private_user(user_id)
+            if err or not room:
+                await CommandSkill.finish(err or "没有正在进行的游戏. ")
+        if group_id and user_id in ban_user.get(group_id, set()):
+            await CommandSkill.finish("你已被该群拉黑，无法使用该指令。")
+
+    player = room.id_2_player.get(user_id)
+    if not player or not player.alive:
+        await CommandSkill.finish("你不在游戏中，或已死亡。")
+    if not player.role:
+        await CommandSkill.finish("游戏还未开始（尚未分配身份）。")
+    if not arg_list:
+        await CommandSkill.finish(
+            "用法：`wft.skill <动作> [参数]`（私聊可用 `-g <群号>` 指定群）"
         )
-    except ValueError:
-        await CommandAction.finish("非法的参数值")
-    role.canAction = False
-    if error := my_game.nightActions():
-        if error[-1:-3] == "获胜":
-            rooms[my_game.groupId].endsUp()
-            del rooms[my_game.groupId]
+    await room.events_system.event_use_skill.active(room, user_id, arg_list)
+    await room.try_advance()
+
+
+@CommandVote.handle()
+async def _(event: MessageEvent, args: Message = CommandArg()):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandVote.finish("请在群聊中使用该指令。")
+    group_id: str = str(event.group_id)
+    if group_id not in rooms or not rooms[group_id]:
+        await CommandVote.finish("没有正在进行的游戏. ")
+    room = rooms[group_id]
+    text = args.extract_plain_text().strip()
+    if not text.isdigit():
+        await CommandVote.finish("用法：`wft.vote <编号>`（编号需要是数字）")
+    ok, msg = await room.cast_vote(event.get_user_id(), int(text))
+    if not ok:
+        await CommandVote.finish(msg)
+    await room.try_advance()
+    await CommandVote.finish(msg)
 
 
 @CommandSkip.handle()
-async def _(event: PrivateMessageEvent):
-    user_id: str = event.get_user_id()
-    try:
-        my_game = [x for x in rooms.values() if user_id in x.playerList][0]
-    except IndexError:
-        await CommandAction.finish("你未加入游戏")
-    try:
-        role = [x for x in my_game.roleList if x.name == user_id][0]
-    except IndexError:
-        await CommandAction.finish("你还没有角色")
-    if role.canAction:
-        role.canAction = False
-        if error := my_game.nightActions():
-            if error[-1:-3] == "获胜":
-                rooms[my_game.groupId].endsUp()
-                del rooms[my_game.groupId]
-    elif role.canUseSkill:
-        role.canUseSkill = False
+async def _(event: MessageEvent, args: Message = CommandArg()):
+    user_id = event.get_user_id()
+
+    raw_tokens = [x for x in args.extract_plain_text().strip().split() if x]
+    hinted_group_id, _, err = _extract_group_id_hint(raw_tokens)
+    if err:
+        await CommandSkip.finish("用法：`wft.skip -g <群号>`")
+
+    room: Room | None = None
+    if isinstance(event, GroupMessageEvent):
+        group_id: str | None = str(event.group_id)
+        if hinted_group_id and hinted_group_id != group_id:
+            await CommandSkip.finish("请在对应群聊中使用该指令（群号与当前群不一致）。")
+        if group_id not in rooms or not rooms[group_id]:
+            await CommandSkip.finish("没有正在进行的游戏. ")
+        room = rooms[group_id]
+        if room.state == "ended":
+            await CommandSkip.finish("该群的游戏已结束。")
     else:
-        await CommandAction.finish("你还不能操作")
-"""
+        if hinted_group_id:
+            group_id = hinted_group_id
+            room = rooms.get(group_id)
+            if not room:
+                await CommandSkip.finish(f"群聊 {group_id} 没有正在进行的游戏。")
+            if room.state == "ended":
+                await CommandSkip.finish("该群的游戏已结束。")
+            if user_id not in room.id_2_player:
+                await CommandSkip.finish("你不在该群的游戏中。")
+        else:
+            group_id, room, err = _resolve_room_for_private_user(user_id)
+            if err or not room:
+                await CommandSkip.finish(err or "没有正在进行的游戏. ")
+        if group_id and user_id in ban_user.get(group_id, set()):
+            await CommandSkip.finish("你已被该群拉黑，无法使用该指令。")
+        if room.state != "night":
+            await CommandSkip.finish("当前阶段请在群聊中使用该指令。")
+
+    ok, msg = await room.skip(user_id)
+    if not ok:
+        await CommandSkip.finish(msg)
+    await room.try_advance()
+    await CommandSkip.finish(msg)
