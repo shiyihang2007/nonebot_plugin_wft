@@ -1,6 +1,5 @@
 """
-Game logic for nonebot_plugin_wft.
+nonebot_plugin_wft 的游戏逻辑。
 
-This package keeps role modules (character_*.py) and event modules (event_*.py) in the same directory.
+本包将角色模块（`character_*.py`）与事件模块（`event_*.py`）放在同一目录下。
 """
-

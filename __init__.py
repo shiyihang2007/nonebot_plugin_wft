@@ -1,9 +1,9 @@
 """
 nonebot_plugin_wft
 
-A room-based Werewolf ("狼人杀") game plugin for NoneBot2 + OneBot v11.
+基于 NoneBot2 + OneBot v11 的房间制狼人杀插件。
 
-Notes
+说明
 - 游戏以群为单位创建房间；私聊用于夜晚技能等隐私操作（`wft.skill ...`、`wft.skip`）。
 - 大部分指令仅允许在群聊中使用（例如 init/join/start/vote）。
 """
@@ -34,10 +34,10 @@ enabled_groups: set[str] = set()
 
 
 async def is_enabled(event: MessageEvent) -> bool:
-    """Rule: whether the plugin should respond to this event.
+    """规则：插件是否响应当前事件。
 
-    - Group: enabled only if group_id is whitelisted and caller is not banned.
-    - Private: allowed (handlers should still validate which commands are allowed in PM).
+    - 群聊：仅当群号在白名单中，且调用者未被拉黑时启用。
+    - 私聊：允许（各 handler 仍需自行校验哪些指令允许在私聊中使用）。
     """
     user_id: str = event.get_user_id()
     if isinstance(event, GroupMessageEvent):
@@ -52,7 +52,7 @@ async def is_enabled(event: MessageEvent) -> bool:
 
 
 async def is_admin(bot: Bot, event: MessageEvent, state: T_State) -> bool:
-    """Rule: group admin only (owner/admin), must @bot."""
+    """规则：仅群管理员（owner/admin）可用，且必须 @机器人。"""
     if not await to_me()(bot, event, state):
         return False
     user_id: str = event.get_user_id()
@@ -172,11 +172,11 @@ room_manager = RoomManager()
 def _resolve_room_for_private_user(
     user_id: str,
 ) -> tuple[str | None, Room | None, str | None]:
-    """Pick a room for a user issuing a private-message command.
+    """为发起私聊指令的用户选择目标房间。
 
-    A user may theoretically be in multiple rooms across groups. In that case we:
-    - Prefer the only room currently in "night" state (common for private skills)
-    - Otherwise report ambiguity and ask the user to specify a target group id
+    一个用户理论上可能同时在多个群的房间中。此时策略是：
+    - 若只有一个房间处于 `night`，优先选择该房间（常见于夜晚私聊技能）。
+    - 否则返回歧义提示，要求用户显式指定群号。
     """
 
     candidates: list[tuple[str, Room]] = [
@@ -207,12 +207,12 @@ def _resolve_room_for_private_user(
 def _extract_group_id_hint(
     tokens: list[str],
 ) -> tuple[str | None, list[str], str | None]:
-    """Extract optional group_id hint from the beginning of a token list.
+    """从 token 列表开头解析可选的群号提示。
 
-    Supported syntaxes (primarily for private-message commands):
+    支持的语法（主要用于私聊指令）：
     - `wft.skill -g <群号> ...`
     - `wft.skip -g <群号>`
-    - `wft.skill <群号> ...`  (only if the number looks like a group id)
+    - `wft.skill <群号> ...`（仅当数字看起来像群号时才会当作群号）
     - `wft.skip <群号>`
     """
 

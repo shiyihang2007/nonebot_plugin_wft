@@ -1,8 +1,7 @@
-"""Base role implementation used by the game loop.
+"""游戏循环使用的角色基类实现。
 
-Roles are implemented as classes living in `game/character_*.py`. A role instance is created
-for each player on game start and registers its bound methods as listeners on the room's
-EventSystem.
+角色以类的形式实现，位于 `game/character_*.py` 中。游戏开始时会为每个玩家创建一个
+角色实例，并将其绑定方法注册为房间 `EventSystem` 的监听器。
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class CharacterBase:
-    """角色基类 (one instance per player)."""
+    """角色基类（每名玩家对应一个实例）。"""
 
     role_id: ClassVar[str] = "base"
     name: ClassVar[str] = "未知"
@@ -23,7 +22,7 @@ class CharacterBase:
     aliases: ClassVar[list[str]] = []  # 角色别名列表
 
     def __init__(self, room: Room, player: Player) -> None:
-        """Attach role to a player and register default event listeners."""
+        """将角色绑定到玩家，并注册默认事件监听器。"""
         self.room = room
         self.player = player
 
@@ -35,36 +34,38 @@ class CharacterBase:
 
     @property
     def user_id(self) -> str:
-        """OneBot user_id (QQ) for this role's player (stored as str)."""
+        """该角色对应玩家的 OneBot user_id（QQ，内部以 str 存储）。"""
         return self.player.user_id
 
     @property
     def alive(self) -> bool:
-        """Whether the player is alive."""
+        """玩家是否存活。"""
         return self.player.alive
 
     async def send_private(self, message: str) -> None:
-        """Send a private message to the role owner."""
+        """给角色所属玩家发送私聊消息。"""
         await self.room.post_to_player(self.user_id, message)
 
-    async def on_night_start(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        """Night phase begins (roles typically prompt their actions here)."""
+    async def on_night_start(
+        self, room: Any, user_id: str | None, args: list[str]
+    ) -> None:
+        """夜晚阶段开始（角色通常在此提示自己的行动）。"""
         return
 
     async def on_day_start(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        """Day phase begins (after night resolution)."""
+        """白天阶段开始（夜晚结算后）。"""
         return
 
     async def on_vote_start(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        """Vote phase begins."""
+        """投票阶段开始。"""
         return
 
     async def on_use_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        """A player issued `/wft skill ...`."""
+        """玩家触发了 `/wft skill ...`。"""
         return
 
     async def on_person_killed(
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
-        """Someone died. `user_id` is the victim, `args` carries reason strings."""
+        """有人死亡：`user_id` 为死者，`args` 携带死亡原因字符串。"""
         return

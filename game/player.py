@@ -1,4 +1,4 @@
-"""Player model for a Room (seat order + alive state + assigned role)."""
+"""`Room` 的玩家模型（座位顺序 / 存活状态 / 分配的角色）。"""
 
 from __future__ import annotations
 
@@ -6,9 +6,10 @@ from .character_base import CharacterBase
 
 
 class Player:
-    """A participant in a Room.
+    """房间中的参与者。
 
-    `order` is 0-based seat index. The UI uses `seat` (1-based).
+    - `order`：0 基座位下标
+    - `seat`：展示用的 1 基座位号
     """
 
     def __init__(self, user_id: str, order: int) -> None:

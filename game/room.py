@@ -1,13 +1,12 @@
-"""
-Room state machine and core game loop for nonebot_plugin_wft.
+"""nonebot_plugin_wft 的房间状态机与核心游戏循环。
 
-This module implements a minimal, classic Werewolf ("狼人杀") flow:
+本模块实现了一个最小可玩的经典狼人杀流程：
 
-- lobby:  create room, join/exit, configure roles
-- night:  wolves kill; seer checks; guard protects; witch save/poison
-- day:    speech phase (players speak in seat order; flips direction every day)
-- vote:   exile vote
-- ended:  winner decided (good win if no wolves; wolf win if wolves >= good)
+- lobby：创建房间、加入/退出、配置角色
+- night：狼人击杀；预言家查验；守卫守护；女巫救人/毒人
+- day：白天发言阶段（按座位顺序依次发言，每天翻转方向）
+- vote：放逐投票
+- ended：胜负判定（无狼人则好人胜；狼人数量 >= 好人数则狼人胜）
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ _logger = logging.getLogger(__name__)
 
 
 def _load_character_classes() -> list[type[CharacterBase]]:
-    """Load all role classes by importing `character_*.py` modules under this package."""
+    """通过导入本包下的 `character_*.py` 模块加载所有角色类。"""
     character_modules = get_modules_in_package_by_prefix(__package__, "character_")
     classes: list[type[CharacterBase]] = []
     for module in character_modules:
@@ -51,10 +50,10 @@ def _build_character_registry(
     dict[str, type[CharacterBase]],
     dict[str, type[CharacterBase]],
 ]:
-    """Build role_id/alias lookup tables from scanned classes.
+    """从扫描到的角色类构建 `role_id` / `aliases` 查找表。
 
-    - Enforces `role_id` uniqueness (later duplicates are ignored with a log message).
-    - Enforces alias uniqueness (later conflicts are ignored with a log message).
+    - 强制 `role_id` 唯一（后出现的重复项会记录日志并忽略）。
+    - 强制 alias 唯一（后出现的冲突项会记录日志并忽略）。
     """
     role_id_2_cls: dict[str, type[CharacterBase]] = {}
     alias_2_cls: dict[str, type[CharacterBase]] = {}
@@ -104,21 +103,20 @@ character_classes, role_id_2_character_cls, alias_2_character_cls = (
 
 
 def get_character_class_by_role_id(role_id: str) -> type[CharacterBase] | None:
-    """Resolve a role class by role_id (e.g. 'wolf')."""
+    """按 `role_id` 查找角色类（例如：`wolf`）。"""
     return role_id_2_character_cls.get(role_id)
 
 
 def get_character_class_by_alias(alias: str) -> type[CharacterBase] | None:
-    """Resolve a role class by an alias text (e.g. '狼', 'seer')."""
+    """按别名文本查找角色类（例如：`狼`、`seer`）。"""
     return alias_2_character_cls.get(alias)
 
 
 class Room:
-    """A per-group game room (one active game per group_id).
+    """按群划分的游戏房间（同一 `group_id` 同时仅允许一局）。
 
-    The room holds player state, role state, and a small event system. Role instances
-    register event listeners on creation (start_game) and react to events by handling
-    `#wft.skill ...` or `#wft.skip`.
+    房间负责保存玩家状态、角色状态与事件系统。游戏开始（`start_game`）时创建角色实例，
+    并注册事件监听器；随后通过处理 `/wft skill ...` 与 `/wft skip` 等玩家输入推进流程。
     """
 
     def __init__(
@@ -158,15 +156,15 @@ class Room:
         self.last_night_death_user_ids: list[str] = []
 
     async def broadcast(self, message: str) -> None:
-        """Send a group message to the room's group."""
+        """向房间所在群发送消息。"""
         await self.func_send_group_message(group_id=int(self.group_id), message=message)
 
     async def post_to_player(self, user_id: str, message: str) -> None:
-        """Send a private message to a player."""
+        """给玩家发送私聊消息。"""
         await self.func_send_private_message(user_id=int(user_id), message=message)
 
     async def add_player(self, user_id: str) -> None:
-        """Add a player to the room (seat order is join order)."""
+        """将玩家加入房间（座位顺序按加入顺序）。"""
         if user_id in self.id_2_player:
             await self.broadcast(f"玩家 {user_id} 已在房间内")
             return
@@ -174,7 +172,7 @@ class Room:
         self.player_list.append(self.id_2_player[user_id])
 
     async def remove_player(self, user_id: str) -> None:
-        """Remove a player and keep seat order continuous."""
+        """移除玩家，并保持座位顺序连续。"""
         try:
             self.player_list.pop(self.id_2_player[user_id].order)
         except KeyError:
@@ -185,7 +183,7 @@ class Room:
         del self.id_2_player[user_id]
 
     async def add_character(self, character_list: list[str]) -> None:
-        """Enable roles by their alias text (e.g. '狼', 'seer')."""
+        """按别名启用角色（例如：`狼`、`seer`）。"""
         added_aliases: list[str] = []
         unknown_aliases: list[str] = []
         for alias in character_list:
@@ -211,7 +209,7 @@ class Room:
         await self.broadcast("\n".join(lines))
 
     async def remove_character(self, character_list: list[str]) -> None:
-        """Disable roles by their alias text."""
+        """按别名移除已启用角色。"""
         removed_aliases: list[str] = []
         unknown_aliases: list[str] = []
         not_enabled: list[str] = []
@@ -243,11 +241,11 @@ class Room:
         await self.broadcast("\n".join(lines))
 
     def change_setting(self, key: str, value: int | str | bool):
-        """Change room settings (reserved for future use)."""
+        """修改房间设置（预留扩展）。"""
         self.settings[key] = value
 
     async def start_game(self) -> None:
-        """Assign roles and enter the first night."""
+        """分配角色并进入第一个夜晚。"""
         if self.state != "lobby":
             await self.broadcast("游戏已开始，无法重复开始。")
             return
@@ -303,21 +301,21 @@ class Room:
         await self.start_night()
 
     def get_player_by_seat(self, seat: int) -> Player | None:
-        """Return a player by 1-based seat number."""
+        """按 1 基座位号获取玩家。"""
         if seat < 1 or seat > len(self.player_list):
             return None
         return self.player_list[seat - 1]
 
     def alive_players(self) -> list[Player]:
-        """Return alive players in seat order."""
+        """按座位顺序返回存活玩家列表。"""
         return [p for p in self.player_list if p.alive]
 
     def alive_user_ids(self) -> set[str]:
-        """Return alive player user_ids."""
+        """返回所有存活玩家的 user_id。"""
         return {p.user_id for p in self.alive_players()}
 
     def alive_role_user_ids(self, role_id: str) -> set[str]:
-        """Return alive user_ids of a given role_id."""
+        """返回指定 `role_id` 的存活玩家 user_id 集合。"""
         return {
             p.user_id
             for p in self.player_list
@@ -325,7 +323,7 @@ class Room:
         }
 
     async def start_night(self) -> None:
-        """Enter night phase and trigger role notifications."""
+        """进入夜晚阶段并触发角色提示。"""
         if self.state == "ended":
             return
         self.state = "night"
@@ -348,11 +346,11 @@ class Room:
         await self.try_advance()
 
     def _lock_night_kill_if_possible(self) -> None:
-        """Try to lock the wolf kill decision.
+        """尝试锁定狼刀结果。
 
-        Rules (minimal):
-        - If a target gets strict majority (> half of alive wolves): lock that kill immediately.
-        - Otherwise, once all wolves have responded (voted or skipped): lock "no kill".
+        最小规则：
+        - 若某个目标获得严格多数票（> 存活狼人一半）：立即锁定击杀该目标。
+        - 否则当所有狼人都已回应（投票或跳过）：锁定为“本夜无人死亡”。
         """
         if self.night_kill_locked:
             return
@@ -378,7 +376,7 @@ class Room:
             self.night_kill_target_user_id = None
 
     async def wolf_vote_kill(self, wolf_user_id: str, seat: int) -> tuple[bool, str]:
-        """Record a wolf's kill vote for the current night."""
+        """记录狼人本夜的击杀投票。"""
         if self.state != "night":
             return False, "现在不是夜晚阶段。"
         if self.night_kill_locked:
@@ -409,7 +407,7 @@ class Room:
         return True, f"已投票击杀 {target.seat}号。"
 
     async def _notify_witches_of_attack(self, victim: Player) -> None:
-        """Notify alive witches of the current locked wolf target (for antidote choice)."""
+        """通知存活女巫当前已锁定的狼刀目标（用于决定是否用解药）。"""
         witches = [
             p
             for p in self.player_list
@@ -425,7 +423,7 @@ class Room:
             )
 
     async def guard_protect(self, guard_user_id: str, seat: int) -> tuple[bool, str]:
-        """Guard chooses a player to protect for this night."""
+        """守卫选择本夜的守护目标。"""
         if self.state != "night":
             return False, "现在不是夜晚阶段。"
         guard_player = self.id_2_player.get(guard_user_id)
@@ -449,7 +447,7 @@ class Room:
         return True, f"你将守护 {target.seat}号。"
 
     async def witch_save(self, witch_user_id: str) -> tuple[bool, str]:
-        """Witch uses antidote to cancel the wolf kill for this night."""
+        """女巫使用解药取消本夜狼刀。"""
         if self.state != "night":
             return False, "现在不是夜晚阶段。"
         witch_player = self.id_2_player.get(witch_user_id)
@@ -469,7 +467,7 @@ class Room:
         return True, "你使用了解药。"
 
     async def witch_poison(self, witch_user_id: str, seat: int) -> tuple[bool, str]:
-        """Witch poisons a player (additional night death)."""
+        """女巫对玩家下毒（额外的夜晚死亡）。"""
         if self.state != "night":
             return False, "现在不是夜晚阶段。"
         witch_player = self.id_2_player.get(witch_user_id)
@@ -493,7 +491,7 @@ class Room:
         return True, f"你对 {target.seat}号 使用了毒药。"
 
     def seer_check(self, seat: int) -> tuple[bool, str]:
-        """Return seer check result text (wolf vs good) for a seat."""
+        """返回预言家对指定座位的查验结果文本（狼人/好人）。"""
         target = self.get_player_by_seat(seat)
         if not target:
             return False, "目标编号无效。"
@@ -505,7 +503,7 @@ class Room:
         return True, f"查验结果: {target.seat}号 是 {result}。"
 
     async def kill_player(self, player: Player, reason: str) -> None:
-        """Mark a player dead and trigger person_killed event."""
+        """标记玩家死亡并触发 `person_killed` 事件。"""
         if not player.alive:
             return
         player.alive = False
@@ -515,7 +513,7 @@ class Room:
         )
 
     def check_winner(self) -> str | None:
-        """Return 'good' or 'wolf' if a camp has won, otherwise None."""
+        """若已分胜负返回 `good` 或 `wolf`，否则返回 None。"""
         alive = self.alive_players()
         wolves = [p for p in alive if p.role and p.role.camp == "wolf"]
         goods = [p for p in alive if not (p.role and p.role.camp == "wolf")]
@@ -526,7 +524,7 @@ class Room:
         return None
 
     async def resolve_night(self) -> None:
-        """Resolve night actions and enter day speech."""
+        """结算夜晚行动并进入白天发言。"""
         if self.state != "night":
             return
 
@@ -578,9 +576,9 @@ class Room:
         await self.start_day_speech()
 
     async def start_day_speech(self) -> None:
-        """Start day speech phase.
+        """开始白天发言阶段。
 
-        Speech order is seat order. Every other day the order is reversed.
+        发言顺序按座位号排列；每隔一天翻转一次方向。
         """
         if self.state == "ended":
             return
@@ -607,7 +605,7 @@ class Room:
         )
 
     def current_speaker_user_id(self) -> str | None:
-        """Return current speaker user_id in day speech phase."""
+        """在白天发言阶段返回当前发言者的 user_id。"""
         if self.state != "day":
             return None
         if self.day_speech_index < 0 or self.day_speech_index >= len(
@@ -617,7 +615,7 @@ class Room:
         return self.day_speech_order_user_ids[self.day_speech_index]
 
     async def end_speech_turn(self, user_id: str) -> tuple[bool, str]:
-        """Advance speech to next speaker (only current speaker can call)."""
+        """结束当前发言并轮到下一位（仅当前发言者可调用）。"""
         if self.state != "day":
             return False, "现在不是发言阶段。"
         current_id = self.current_speaker_user_id()
@@ -650,7 +648,7 @@ class Room:
         return True, "你已结束发言。"
 
     async def start_vote(self) -> None:
-        """Enter vote phase and prompt players to vote."""
+        """进入投票阶段并提示玩家投票。"""
         if self.state == "ended":
             return
         self.state = "vote"
@@ -662,7 +660,7 @@ class Room:
         await self.try_advance()
 
     async def cast_vote(self, voter_user_id: str, seat: int) -> tuple[bool, str]:
-        """Cast/overwrite a vote for an alive target in vote phase."""
+        """在投票阶段对存活目标投票/改票。"""
         if self.state != "vote":
             return False, "现在不是投票阶段。"
         voter = self.id_2_player.get(voter_user_id)
@@ -679,7 +677,7 @@ class Room:
         return True, "投票成功。"
 
     async def skip(self, user_id: str) -> tuple[bool, str]:
-        """Skip the current required action (role action / speech / vote)."""
+        """跳过当前需要的操作（夜晚行动/发言/投票）。"""
         player = self.id_2_player.get(user_id)
         if not player or not player.alive:
             return False, "你不在游戏中，或已死亡。"
@@ -715,7 +713,7 @@ class Room:
         return False, "当前阶段不支持跳过。"
 
     async def resolve_vote(self) -> None:
-        """Resolve exile vote and start next night (or end game)."""
+        """结算放逐投票并进入下一夜（或结束游戏）。"""
         if self.state != "vote":
             return
 
@@ -750,7 +748,7 @@ class Room:
         await self.start_night()
 
     async def try_advance(self) -> None:
-        """Advance state machine if all required actions for current phase are done."""
+        """若当前阶段所需操作已全部完成，则推进状态机。"""
         if self.state == "night":
             self._lock_night_kill_if_possible()
             seers = self.alive_role_user_ids("seer")

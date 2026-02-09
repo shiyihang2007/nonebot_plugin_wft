@@ -1,4 +1,4 @@
-"""Event container for a single Room instance."""
+"""单个 `Room` 实例的事件容器。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from .event_base import EventBase
 
 
 class EventSystem:
-    """A set of event channels used by role listeners."""
+    """角色监听器使用的一组事件通道。"""
 
     def __init__(self) -> None:
         self.event_night_start = EventBase()

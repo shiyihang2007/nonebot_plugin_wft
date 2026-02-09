@@ -1,4 +1,4 @@
-"""Seer role: can check one player each night (wolf vs good)."""
+"""预言家：每晚可查验一名玩家阵营（狼人/好人）。"""
 
 from __future__ import annotations
 

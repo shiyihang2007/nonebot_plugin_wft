@@ -1,4 +1,4 @@
-"""Wolf role: votes to kill a target at night (majority locks the kill)."""
+"""狼人：夜晚投票击杀目标（多数票可锁定击杀）。"""
 
 from __future__ import annotations
 

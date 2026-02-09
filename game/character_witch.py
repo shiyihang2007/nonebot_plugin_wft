@@ -1,4 +1,4 @@
-"""Witch role: has one antidote (save) and one poison (kill)."""
+"""女巫：解药（救人）与毒药（杀人）各一次。"""
 
 from __future__ import annotations
 

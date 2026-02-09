@@ -1,4 +1,4 @@
-"""Typing-only protocol for async event listeners."""
+"""异步事件监听器的类型协议（仅用于类型标注）。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Lightweight reflection helpers used by the plugin (dynamic role loading)."""
+"""插件使用的轻量反射工具（用于动态加载角色）。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pkgutil
 
 
 def get_classes_in_module(module: object) -> list[type]:
-    """Return all classes defined in a module object."""
+    """返回模块对象中定义的所有类。"""
     classes = []
     for name in dir(module):
         member = getattr(module, name)
@@ -17,7 +17,7 @@ def get_classes_in_module(module: object) -> list[type]:
 
 
 def get_module_in_directory(package: str, directory: str) -> list[object]:
-    """Import all modules under a subpackage directory (package.directory.*)."""
+    """导入子包目录下的所有模块（`package.directory.*`）。"""
     modules = []
     full_package_name = f"{package}.{directory}"
     try:
@@ -30,7 +30,7 @@ def get_module_in_directory(package: str, directory: str) -> list[object]:
 
 
 def get_modules_in_package_by_prefix(package: str | None, prefix: str) -> list[object]:
-    """Import all modules under a package whose module name starts with prefix."""
+    """导入包下所有以 `prefix` 开头的模块。"""
     if not package:
         return []
     modules = []

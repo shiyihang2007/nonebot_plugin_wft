@@ -1,4 +1,4 @@
-"""Villager role (no active skills)."""
+"""村民（无主动技能）。"""
 
 from __future__ import annotations
 

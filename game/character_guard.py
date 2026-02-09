@@ -1,4 +1,4 @@
-"""Guard role: protects one player at night (cannot protect same target consecutively)."""
+"""守卫：夜晚守护一名玩家（不可连续两晚守同一目标）。"""
 
 from __future__ import annotations
 
