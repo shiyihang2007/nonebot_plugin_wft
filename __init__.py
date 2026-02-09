@@ -23,9 +23,7 @@ from nonebot.typing import T_State
 from nonebot.params import CommandArg
 from nonebot.rule import to_me
 
-from .game.room import Room
-from .game.character_wolf import CharacterWolf
-from .game.character_seer import CharacterSeer
+from .game.room import Room, get_character_class_by_role_id
 
 # require("nonebot_plugin_datastore")
 # from nonebot_plugin_datastore import PluginData
@@ -365,8 +363,12 @@ async def _(event: MessageEvent):
         wolves = 4
 
     room.character_enabled.clear()
-    room.character_enabled[CharacterWolf] = wolves
-    room.character_enabled[CharacterSeer] = 1
+    wolf_cls = get_character_class_by_role_id("wolf")
+    seer_cls = get_character_class_by_role_id("seer")
+    if not wolf_cls or not seer_cls:
+        await CommandAutoroles.finish("角色加载异常：缺少狼人/预言家角色定义。")
+    room.character_enabled[wolf_cls] = wolves
+    room.character_enabled[seer_cls] = 1
     await CommandAutoroles.finish(
         f"已自动配置角色：狼人 x{wolves}，预言家 x1，其余为村民。"
     )

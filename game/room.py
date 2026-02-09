@@ -12,6 +12,7 @@ This module implements a minimal, classic Werewolf ("狼人杀") flow:
 
 from __future__ import annotations
 
+import logging
 import random
 from collections import Counter
 
@@ -21,6 +22,9 @@ from .player import Player
 from .character_base import CharacterBase
 from .character_person import CharacterPerson
 from .event_system import EventSystem
+
+
+_logger = logging.getLogger(__name__)
 
 
 def _load_character_classes() -> list[type[CharacterBase]]:
@@ -40,7 +44,73 @@ def _load_character_classes() -> list[type[CharacterBase]]:
     return classes
 
 
-character_classes: list[type[CharacterBase]] = _load_character_classes()
+def _build_character_registry(
+    classes: list[type[CharacterBase]],
+) -> tuple[
+    list[type[CharacterBase]],
+    dict[str, type[CharacterBase]],
+    dict[str, type[CharacterBase]],
+]:
+    """Build role_id/alias lookup tables from scanned classes.
+
+    - Enforces `role_id` uniqueness (later duplicates are ignored with a log message).
+    - Enforces alias uniqueness (later conflicts are ignored with a log message).
+    """
+    role_id_2_cls: dict[str, type[CharacterBase]] = {}
+    alias_2_cls: dict[str, type[CharacterBase]] = {}
+
+    for cls in classes:
+        role_id = getattr(cls, "role_id", None)
+        if not isinstance(role_id, str) or not role_id:
+            _logger.warning("Ignore role class without role_id: %s", cls)
+            continue
+
+        if role_id in role_id_2_cls and role_id_2_cls[role_id] is not cls:
+            _logger.error(
+                "Duplicate role_id %r: %s vs %s (ignored: %s)",
+                role_id,
+                role_id_2_cls[role_id],
+                cls,
+                cls,
+            )
+            continue
+
+        role_id_2_cls[role_id] = cls
+
+        aliases = getattr(cls, "aliases", None)
+        if not isinstance(aliases, list):
+            continue
+        for alias in aliases:
+            if not isinstance(alias, str) or not alias:
+                continue
+            if alias in alias_2_cls and alias_2_cls[alias] is not cls:
+                _logger.error(
+                    "Alias conflict %r: %s vs %s (ignored: %s)",
+                    alias,
+                    alias_2_cls[alias],
+                    cls,
+                    cls,
+                )
+                continue
+            alias_2_cls[alias] = cls
+
+    unique_classes = list(role_id_2_cls.values())
+    return unique_classes, role_id_2_cls, alias_2_cls
+
+
+character_classes, role_id_2_character_cls, alias_2_character_cls = (
+    _build_character_registry(_load_character_classes())
+)
+
+
+def get_character_class_by_role_id(role_id: str) -> type[CharacterBase] | None:
+    """Resolve a role class by role_id (e.g. 'wolf')."""
+    return role_id_2_character_cls.get(role_id)
+
+
+def get_character_class_by_alias(alias: str) -> type[CharacterBase] | None:
+    """Resolve a role class by an alias text (e.g. '狼', 'seer')."""
+    return alias_2_character_cls.get(alias)
 
 
 class Room:
@@ -116,36 +186,61 @@ class Room:
 
     async def add_character(self, character_list: list[str]) -> None:
         """Enable roles by their alias text (e.g. '狼', 'seer')."""
-        added_characters: list[str] = []
-        for i in character_list:
-            for j in character_classes:
-                if i in j.aliases:
-                    if j not in self.character_enabled:
-                        self.character_enabled[j] = 0
-                    self.character_enabled[j] += 1
-                    added_characters.append(i)
-        await self.broadcast(
-            f"添加了角色: {', '.join(added_characters)}"
-            if added_characters
-            else "没有添加任何角色"
-        )
+        added_aliases: list[str] = []
+        unknown_aliases: list[str] = []
+        for alias in character_list:
+            alias = alias.strip()
+            if not alias:
+                continue
+            role_cls = get_character_class_by_alias(alias)
+            if not role_cls:
+                unknown_aliases.append(alias)
+                continue
+            self.character_enabled[role_cls] = (
+                self.character_enabled.get(role_cls, 0) + 1
+            )
+            added_aliases.append(alias)
+
+        lines: list[str] = []
+        if added_aliases:
+            lines.append(f"添加了角色: {', '.join(added_aliases)}")
+        if unknown_aliases:
+            lines.append(f"未知角色别名: {', '.join(unknown_aliases)}")
+        if not lines:
+            lines.append("没有添加任何角色")
+        await self.broadcast("\n".join(lines))
 
     async def remove_character(self, character_list: list[str]) -> None:
         """Disable roles by their alias text."""
-        removed_characters: list[str] = []
-        for i in character_list:
-            for j in character_classes:
-                if i in j.aliases:
-                    if j in self.character_enabled:
-                        self.character_enabled[j] -= 1
-                        if self.character_enabled[j] <= 0:
-                            del self.character_enabled[j]
-                        removed_characters.append(i)
-        await self.broadcast(
-            f"移除了角色: {', '.join(removed_characters)}"
-            if removed_characters
-            else "没有移除任何角色"
-        )
+        removed_aliases: list[str] = []
+        unknown_aliases: list[str] = []
+        not_enabled: list[str] = []
+        for alias in character_list:
+            alias = alias.strip()
+            if not alias:
+                continue
+            role_cls = get_character_class_by_alias(alias)
+            if not role_cls:
+                unknown_aliases.append(alias)
+                continue
+            if role_cls not in self.character_enabled:
+                not_enabled.append(alias)
+                continue
+            self.character_enabled[role_cls] -= 1
+            if self.character_enabled[role_cls] <= 0:
+                del self.character_enabled[role_cls]
+            removed_aliases.append(alias)
+
+        lines: list[str] = []
+        if removed_aliases:
+            lines.append(f"移除了角色: {', '.join(removed_aliases)}")
+        if not_enabled:
+            lines.append(f"未启用角色别名: {', '.join(not_enabled)}")
+        if unknown_aliases:
+            lines.append(f"未知角色别名: {', '.join(unknown_aliases)}")
+        if not lines:
+            lines.append("没有移除任何角色")
+        await self.broadcast("\n".join(lines))
 
     def change_setting(self, key: str, value: int | str | bool):
         """Change room settings (reserved for future use)."""
