@@ -14,3 +14,4 @@ class EventSystem:
         self.event_vote_start = EventBase()
 
         self.event_use_skill = EventBase()
+        self.event_person_killed = EventBase()

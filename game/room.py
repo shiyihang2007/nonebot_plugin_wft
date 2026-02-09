@@ -415,6 +415,9 @@ class Room:
             return
         player.alive = False
         await self.post_to_player(player.user_id, f"你已死亡 ({reason}) 。")
+        await self.events_system.event_person_killed.active(
+            self, player.user_id, [reason]
+        )
 
     def check_winner(self) -> str | None:
         """Return 'good' or 'wolf' if a camp has won, otherwise None."""
