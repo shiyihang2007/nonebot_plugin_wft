@@ -14,11 +14,19 @@ class CharacterGuard(CharacterGod):
     name = "守卫"
     aliases = ["guard", "守卫", "守"]
 
+    def __init__(self, room, player) -> None:
+        super().__init__(room, player)
+        self._night_done: bool = False
+        self._night_target_user_id: str | None = None
+        self._last_target_user_id: str | None = None
+
     async def on_night_start(
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
         if not self.alive:
             return
+        self._night_done = False
+        self._night_target_user_id = None
         # 等待“守卫动作”完成：为 night_end 增加一个锁
         self.room.events_system.event_night_end.lock()
         await self.send_private(
@@ -35,7 +43,7 @@ class CharacterGuard(CharacterGod):
         if self.room.state != "night":
             await self.send_private("现在不是夜晚阶段，无法守护。")
             return
-        if self.user_id in self.room.night_guard_done_user_ids:
+        if self._night_done:
             await self.send_private("你今晚已经完成守护/放弃，无需重复操作。")
             return
         if not args:
@@ -66,14 +74,18 @@ class CharacterGuard(CharacterGod):
             return
         if self.room.state != "night":
             return
-        if self.user_id in self.room.night_guard_done_user_ids:
+        if self._night_done:
             return
 
-        self.room.night_guard_done_user_ids.add(self.user_id)
+        self._night_done = True
         await self.send_private("你已放弃本夜守护。")
         await self.room.events_system.event_night_end.unlock(
             self.room, self.user_id, []
         )
+
+    def get_night_protect_target_user_id(self) -> str | None:
+        """返回本夜守护目标的 user_id；未守护则为 None。"""
+        return self._night_target_user_id
 
     async def _protect(self, seat: int) -> tuple[bool, str]:
         """守卫守护目标（仅修改房间的“夜晚结算”通用数据）。"""
@@ -88,10 +100,11 @@ class CharacterGuard(CharacterGod):
         if not target.alive:
             return False, "目标已死亡。"
 
-        last = self.room.guard_last_target_by_user_id.get(self.user_id)
+        last = self._last_target_user_id
         if last and last == target.user_id:
             return False, "不能连续两晚守护同一名玩家。"
 
-        self.room.night_guard_target_by_user_id[self.user_id] = target.user_id
-        self.room.night_guard_done_user_ids.add(self.user_id)
+        self._night_target_user_id = target.user_id
+        self._night_done = True
+        self._last_target_user_id = target.user_id
         return True, f"你将守护 {target.seat}号。"

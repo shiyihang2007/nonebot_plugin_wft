@@ -157,21 +157,6 @@ class Room:
         self.day_speech_order_user_ids: list[str] = []
         self.day_speech_index: int = 0
 
-        self.night_kill_votes: dict[str, str] = {}
-        self.night_wolf_done_user_ids: set[str] = set()
-        self.night_kill_target_user_id: str | None = None
-        self.night_kill_locked: bool = False
-        self._night_wolf_locked_event_fired: bool = False
-        self.night_seer_done_user_ids: set[str] = set()
-
-        self.night_guard_target_by_user_id: dict[str, str] = {}
-        self.guard_last_target_by_user_id: dict[str, str] = {}
-        self.night_guard_done_user_ids: set[str] = set()
-
-        self.night_witch_done_user_ids: set[str] = set()
-        self.night_witch_saved: bool = False
-        self.night_witch_poison_target_by_user_id: dict[str, str] = {}
-
         self.votes: dict[str, str | None] = {}
         self.last_night_death_user_ids: list[str] = []
 
@@ -409,20 +394,7 @@ class Room:
         """夜晚开始：重置夜晚运行时状态并广播提示。"""
         self.state = "night"
 
-        self.night_kill_votes = {}
-        self.night_wolf_done_user_ids = set()
-        self.night_kill_target_user_id = None
-        self.night_kill_locked = False
-        self._night_wolf_locked_event_fired = False
-        self.night_seer_done_user_ids = set()
         self.last_night_death_user_ids = []
-
-        self.night_guard_target_by_user_id = {}
-        self.night_guard_done_user_ids = set()
-
-        self.night_witch_done_user_ids = set()
-        self.night_witch_saved = False
-        self.night_witch_poison_target_by_user_id = {}
 
         self._pending_death_records = []
 
@@ -452,17 +424,47 @@ class Room:
 
         victims: list[tuple[Player, str]] = []
 
-        protected = set(self.night_guard_target_by_user_id.values())
-        for guard_id, target_id in self.night_guard_target_by_user_id.items():
-            self.guard_last_target_by_user_id[guard_id] = target_id
+        # 角色相关运行时状态下沉至各角色对象（角色文件）中；房间在结算阶段仅聚合结果。
+        protected: set[str] = set()
+        wolf_kill_target_user_id: str | None = None
+        witch_saved: bool = False
+        witch_poison_target_user_ids: set[str] = set()
 
-        if self.night_kill_target_user_id and not self.night_witch_saved:
-            if self.night_kill_target_user_id not in protected:
-                victim = self.id_2_player.get(self.night_kill_target_user_id)
+        for player in self.alive_players():
+            role = player.role
+            if not role:
+                continue
+            role_id = getattr(role, "role_id", None)
+
+            if role_id == "guard":
+                get_target = getattr(role, "get_night_protect_target_user_id", None)
+                if callable(get_target):
+                    target_id = get_target()
+                    if target_id:
+                        protected.add(target_id)
+
+            if role_id == "wolf" and wolf_kill_target_user_id is None:
+                get_kill = getattr(role, "get_night_kill_target_user_id", None)
+                if callable(get_kill):
+                    wolf_kill_target_user_id = get_kill() or None
+
+            if role_id == "witch":
+                get_saved = getattr(role, "get_night_saved", None)
+                if callable(get_saved) and get_saved():
+                    witch_saved = True
+                get_poison = getattr(role, "get_night_poison_target_user_id", None)
+                if callable(get_poison):
+                    poison_target_id = get_poison()
+                    if poison_target_id:
+                        witch_poison_target_user_ids.add(poison_target_id)
+
+        if wolf_kill_target_user_id and not witch_saved:
+            if wolf_kill_target_user_id not in protected:
+                victim = self.id_2_player.get(wolf_kill_target_user_id)
                 if victim and victim.alive:
                     victims.append((victim, "夜晚被狼人击杀"))
 
-        for target_id in set(self.night_witch_poison_target_by_user_id.values()):
+        for target_id in witch_poison_target_user_ids:
             victim = self.id_2_player.get(target_id)
             if victim and victim.alive:
                 if all(v.user_id != victim.user_id for v, _ in victims):

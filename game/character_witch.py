@@ -18,6 +18,11 @@ class CharacterWitch(CharacterGod):
         super().__init__(room, player)
         self.has_antidote: bool = True
         self.has_poison: bool = True
+        self._night_done: bool = False
+        self._night_saved: bool = False
+        self._night_poison_target_user_id: str | None = None
+        self._wolf_locked: bool = False
+        self._wolf_kill_target_user_id: str | None = None
         room.events_system.event_wolf_locked.add_listener(
             self.on_wolf_locked, priority=0
         )
@@ -26,6 +31,11 @@ class CharacterWitch(CharacterGod):
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
         # 女巫在“狼刀锁定”后再行动（见 docs/wft_event_graph.md：4 -> 5）。
+        self._night_done = False
+        self._night_saved = False
+        self._night_poison_target_user_id = None
+        self._wolf_locked = False
+        self._wolf_kill_target_user_id = None
         return
 
     async def on_wolf_locked(
@@ -36,14 +46,19 @@ class CharacterWitch(CharacterGod):
             return
         if self.room.state != "night":
             return
-        if self.user_id in self.room.night_witch_done_user_ids:
+        if self._night_done:
+            return
+        if self._wolf_locked:
             return
 
+        self._wolf_locked = True
+        target_user_id = args[0].strip() if args else ""
+        self._wolf_kill_target_user_id = target_user_id or None
         self.room.events_system.event_night_end.lock()
 
         tips: list[str] = ["狼人行动已锁定，你是女巫。", "你可以："]
-        if self.room.night_kill_target_user_id:
-            victim = self.room.id_2_player.get(self.room.night_kill_target_user_id)
+        if self._wolf_kill_target_user_id:
+            victim = self.room.id_2_player.get(self._wolf_kill_target_user_id)
             if victim:
                 tips.append(f"- 当前狼刀落在：{victim.seat}号")
         else:
@@ -64,10 +79,10 @@ class CharacterWitch(CharacterGod):
         if self.room.state != "night":
             await self.send_private("现在不是夜晚阶段，无法使用女巫技能。")
             return
-        if not self.room.night_kill_locked:
+        if not self._wolf_locked:
             await self.send_private("请等待狼人行动锁定后再行动。")
             return
-        if self.user_id in self.room.night_witch_done_user_ids:
+        if self._night_done:
             await self.send_private("你今晚已经完成用药/放弃，无需重复操作。")
             return
         if not args:
@@ -115,27 +130,46 @@ class CharacterWitch(CharacterGod):
             return
         if self.room.state != "night":
             return
-        if not self.room.night_kill_locked:
+        if not self._wolf_locked:
             return
-        if self.user_id in self.room.night_witch_done_user_ids:
+        if self._night_done:
             return
 
-        self.room.night_witch_done_user_ids.add(self.user_id)
+        self._night_done = True
         await self.send_private("你已放弃本夜用药。")
         await self.room.events_system.event_night_end.unlock(self.room, self.user_id, [])
+
+    def get_night_saved(self) -> bool:
+        """本夜是否使用了解药（用于夜晚结算）。"""
+        return self._night_saved
+
+    def get_night_poison_target_user_id(self) -> str | None:
+        """返回本夜下毒目标的 user_id；未下毒则为 None。"""
+        return self._night_poison_target_user_id
+
+    def _alive_witches(self) -> list["CharacterWitch"]:
+        witches: list[CharacterWitch] = []
+        for p in self.room.player_list:
+            if not p.alive or not p.role:
+                continue
+            if getattr(p.role, "role_id", None) != "witch":
+                continue
+            if isinstance(p.role, CharacterWitch):
+                witches.append(p.role)
+        return witches
 
     async def _save(self) -> tuple[bool, str]:
         """使用解药取消本夜狼刀（仅修改房间的“夜晚结算”通用数据）。"""
         if self.room.state != "night":
             return False, "现在不是夜晚阶段。"
-        if self.room.night_witch_saved:
+        if any(w.get_night_saved() for w in self._alive_witches()):
             return False, "本夜已使用过解药。"
-        if not self.room.night_kill_target_user_id:
+        if not self._wolf_kill_target_user_id:
             return False, "当前没有可救的人 (狼刀未确定或本夜平安) 。"
 
-        self.room.night_witch_saved = True
-        self.room.night_witch_done_user_ids.add(self.user_id)
-        victim = self.room.id_2_player.get(self.room.night_kill_target_user_id)
+        self._night_saved = True
+        self._night_done = True
+        victim = self.room.id_2_player.get(self._wolf_kill_target_user_id)
         if victim:
             return True, f"你使用了解药，救下了 {victim.seat}号。"
         return True, "你使用了解药。"
@@ -152,9 +186,9 @@ class CharacterWitch(CharacterGod):
             return False, "目标已死亡。"
         if target.user_id == self.user_id:
             return False, "不能对自己使用毒药。"
-        if self.user_id in self.room.night_witch_poison_target_by_user_id:
+        if self._night_poison_target_user_id is not None:
             return False, "你本夜已经使用过毒药。"
 
-        self.room.night_witch_poison_target_by_user_id[self.user_id] = target.user_id
-        self.room.night_witch_done_user_ids.add(self.user_id)
+        self._night_poison_target_user_id = target.user_id
+        self._night_done = True
         return True, f"你对 {target.seat}号 使用了毒药。"

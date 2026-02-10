@@ -17,6 +17,7 @@ class CharacterSeer(CharacterGod):
 
     def __init__(self, room, player) -> None:
         super().__init__(room, player)
+        self._night_done: bool = False
         # 预言家专属事件：仅当场上存在预言家时才会创建/使用该事件
         room.events_system.get_or_create_event("seer_check").add_listener(
             self.on_seer_check_event, priority=0
@@ -27,6 +28,7 @@ class CharacterSeer(CharacterGod):
     ) -> None:
         if not self.alive:
             return
+        self._night_done = False
         # 等待“预言家动作”完成：为 night_end 增加一个锁
         self.room.events_system.event_night_end.lock()
         await self.send_private(
@@ -43,7 +45,7 @@ class CharacterSeer(CharacterGod):
         if self.room.state != "night":
             await self.send_private("现在不是夜晚阶段，无法查验。")
             return
-        if self.user_id in self.room.night_seer_done_user_ids:
+        if self._night_done:
             await self.send_private("你今晚已经完成查验/放弃，无需重复操作。")
             return
         if not args:
@@ -63,7 +65,7 @@ class CharacterSeer(CharacterGod):
             await self.send_private(result)
             return
 
-        self.room.night_seer_done_user_ids.add(self.user_id)
+        self._night_done = True
         await self.room.events_system.get_or_create_event("seer_check").active(
             self.room, self.user_id, [args[1], result]
         )
@@ -78,10 +80,10 @@ class CharacterSeer(CharacterGod):
             return
         if self.room.state != "night":
             return
-        if self.user_id in self.room.night_seer_done_user_ids:
+        if self._night_done:
             return
 
-        self.room.night_seer_done_user_ids.add(self.user_id)
+        self._night_done = True
         await self.send_private("你已放弃本夜查验。")
         await self.room.events_system.event_night_end.unlock(
             self.room, self.user_id, []
