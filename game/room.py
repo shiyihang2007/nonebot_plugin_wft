@@ -145,10 +145,13 @@ class Room:
         self.character_enabled: dict[type[CharacterBase], int] = {}
         self.settings: dict[str, int | str | bool] = {}
 
-        # `state` 用于表示“是否可加入/是否已结束”等粗粒度状态；
-        # 具体流程推进由事件系统控制，但仍保留 `phase` 用于校验玩家输入。
-        self.state: str = "lobby"  # lobby / running / ended
-        self.phase: str = "lobby"  # lobby / night / speech / vote / ended
+        # 对局阶段（用于校验玩家输入；推进由事件系统的 lock/unlock 触发）
+        # - lobby：未开始，可加入/配置
+        # - night：夜晚（私聊技能/跳过）
+        # - speech：白天轮流发言（群聊 skip 推进）
+        # - vote：白天投票（群聊 vote/skip）
+        # - ended：终局
+        self.state: str = "lobby"
 
         self.day_count: int = 0
         self.day_speech_order_user_ids: list[str] = []
@@ -359,9 +362,6 @@ class Room:
 
         # 注册核心监听器（在触发 game_start 事件前完成）
         self._register_core_event_listeners()
-
-        self.state = "running"
-        self.phase = "lobby"
         await self.events_system.event_game_start.active(self, None, [])
 
     async def start_game(self) -> None:
@@ -408,7 +408,6 @@ class Room:
     ) -> None:
         """夜晚开始：重置夜晚运行时状态并广播提示。"""
         self.state = "night"
-        self.phase = "night"
 
         self.night_kill_votes = {}
         self.night_wolf_done_user_ids = set()
@@ -446,7 +445,7 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """夜晚结束：结算夜晚行动并记录死亡列表（不在此处推进到下一事件）。"""
-        if self.phase != "night":
+        if self.state != "night":
             return
 
         self._pending_death_records = []
@@ -522,13 +521,12 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """白天开始：检查终局；若未结束则进入轮流发言。"""
-        self.state = "day"
         winner = self.check_winner()
         if winner:
             await self.events_system.event_game_end.active(self, None, [winner])
             return
 
-        self.phase = "speech"
+        self.state = "speech"
         self.day_count += 1
         self.day_speech_order_user_ids = [p.user_id for p in self.player_list if p.alive]
         ascending = self.day_count % 2 == 1
@@ -553,7 +551,6 @@ class Room:
     ) -> None:
         """开始投票：初始化投票数据，并锁定 vote_end 等待所有存活玩家回应。"""
         self.state = "vote"
-        self.phase = "vote"
         self.votes = {}
         alive = self.alive_user_ids()
         self.vote_pending_user_ids = set(alive)
@@ -573,7 +570,7 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """玩家投票输入：记录投票并在首次回应时解锁 vote_end。"""
-        if not user_id or self.phase != "vote":
+        if not user_id or self.state != "vote":
             return
         voter = self.id_2_player.get(user_id)
         if not voter or not voter.alive:
@@ -600,11 +597,11 @@ class Room:
         if not user_id:
             return
 
-        if self.phase == "speech":
+        if self.state == "speech":
             await self._handle_speech_skip(user_id)
             return
 
-        if self.phase == "vote":
+        if self.state == "vote":
             await self._handle_vote_skip(user_id)
             return
 
@@ -648,7 +645,7 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """结束投票：结算放逐并记录死亡（不在此处推进到下一事件）。"""
-        if self.phase != "vote":
+        if self.state != "vote":
             return
 
         self._pending_death_records = []
@@ -717,30 +714,6 @@ class Room:
             await self.broadcast("游戏结束。")
 
         self.state = "ended"
-        self.phase = "ended"
-
-    async def start_night(self) -> None:
-        """进入夜晚阶段并触发角色提示。"""
-        if self.state == "ended":
-            return
-        self.state = "night"
-        self.night_kill_votes = {}
-        self.night_wolf_done_user_ids = set()
-        self.night_kill_target_user_id = None
-        self.night_kill_locked = False
-        self.night_seer_done_user_ids = set()
-        self.last_night_death_user_ids = []
-
-        self.night_guard_target_by_user_id = {}
-        self.night_guard_done_user_ids = set()
-
-        self.night_witch_done_user_ids = set()
-        self.night_witch_saved = False
-        self.night_witch_poison_target_by_user_id = {}
-
-        await self.broadcast("天黑请闭眼。")
-        await self.events_system.event_night_start.active(self, None, [])
-        await self.try_advance()
 
     def _lock_night_kill_if_possible(self) -> None:
         """尝试锁定狼刀结果。
@@ -904,129 +877,15 @@ class Room:
             return "wolf"
         return None
 
-    async def resolve_night(self) -> None:
-        """结算夜晚行动并进入白天发言。"""
-        if self.state != "night":
-            return
-
-        victims: list[Player] = []
-
-        protected = set(self.night_guard_target_by_user_id.values())
-        for guard_id, target_id in self.night_guard_target_by_user_id.items():
-            self.guard_last_target_by_user_id[guard_id] = target_id
-
-        if self.night_kill_target_user_id and not self.night_witch_saved:
-            if self.night_kill_target_user_id not in protected:
-                victim = self.id_2_player.get(self.night_kill_target_user_id)
-                if victim and victim.alive:
-                    victims.append(victim)
-
-        for target_id in set(self.night_witch_poison_target_by_user_id.values()):
-            victim = self.id_2_player.get(target_id)
-            if victim and victim.alive and victim not in victims:
-                victims.append(victim)
-
-        for v in victims:
-            reason = "夜晚死亡"
-            if (
-                v.user_id == self.night_kill_target_user_id
-                and not self.night_witch_saved
-            ):
-                reason = "夜晚被狼人击杀"
-            if v.user_id in self.night_witch_poison_target_by_user_id.values():
-                reason = "夜晚被女巫毒杀"
-            await self.kill_player(v, reason)
-            self.last_night_death_user_ids.append(v.user_id)
-
-        self.state = "day"
-        if not victims:
-            await self.broadcast("天亮了: 昨晚是平安夜。")
-        else:
-            seats = "、".join(f"{p.seat}号" for p in victims)
-            await self.broadcast(f"天亮了: 昨晚 {seats} 死亡。")
-        await self.events_system.event_day_start.active(self, None, [])
-
-        winner = self.check_winner()
-        if winner:
-            await self.broadcast(
-                "游戏结束: " + ("好人胜利！" if winner == "good" else "狼人胜利！")
-            )
-            self.state = "ended"
-            return
-
-        await self.start_day_speech()
-
-    async def start_day_speech(self) -> None:
-        """开始白天发言阶段。
-
-        发言顺序按座位号排列；每隔一天翻转一次方向。
-        """
-        if self.state == "ended":
-            return
-        self.state = "day"
-        self.day_count += 1
-        self.day_speech_order_user_ids = [
-            p.user_id for p in self.player_list if p.alive
-        ]
-        ascending = self.day_count % 2 == 1
-        if not ascending:
-            self.day_speech_order_user_ids.reverse()
-        self.day_speech_index = 0
-
-        if not self.day_speech_order_user_ids:
-            await self.broadcast("无人存活，游戏结束。")
-            self.state = "ended"
-            return
-
-        first = self.id_2_player[self.day_speech_order_user_ids[0]]
-        direction = "从小到大" if ascending else "从大到小"
-        await self.broadcast(
-            f"白天发言阶段开始 (第{self.day_count}天) : 按编号顺序依次发言 ({direction}) 。\n"
-            f"请 {first.seat}号 发言。发言结束后发送 `/wft skip` 进入下一位。"
-        )
-
     def current_speaker_user_id(self) -> str | None:
         """在白天发言阶段返回当前发言者的 user_id。"""
-        if self.state != "day":
+        if self.state != "speech":
             return None
         if self.day_speech_index < 0 or self.day_speech_index >= len(
             self.day_speech_order_user_ids
         ):
             return None
         return self.day_speech_order_user_ids[self.day_speech_index]
-
-    async def end_speech_turn(self, user_id: str) -> tuple[bool, str]:
-        """结束当前发言并轮到下一位（仅当前发言者可调用）。"""
-        if self.state != "day":
-            return False, "现在不是发言阶段。"
-        current_id = self.current_speaker_user_id()
-        if not current_id:
-            return False, "发言阶段状态异常。"
-        if user_id != current_id:
-            current_player = self.id_2_player.get(current_id)
-            if current_player:
-                return False, f"还没轮到你发言。当前请 {current_player.seat}号 发言。"
-            return False, "还没轮到你发言。"
-
-        current_player = self.id_2_player.get(current_id)
-        self.day_speech_index += 1
-        if self.day_speech_index >= len(self.day_speech_order_user_ids):
-            await self.broadcast("发言结束，开始投票。")
-            await self.start_vote()
-            return True, "你已结束发言，进入投票。"
-
-        next_id = self.day_speech_order_user_ids[self.day_speech_index]
-        next_player = self.id_2_player.get(next_id)
-        if current_player and next_player:
-            await self.broadcast(
-                f"{current_player.seat}号 发言结束。请 {next_player.seat}号 发言。"
-            )
-        elif next_player:
-            await self.broadcast(f"请 {next_player.seat}号 发言。")
-        else:
-            await self.broadcast("发言顺序异常，直接进入投票。")
-            await self.start_vote()
-        return True, "你已结束发言。"
 
     async def start_vote(self) -> None:
         """兼容旧接口：进入投票阶段（事件驱动）。"""
@@ -1058,42 +917,3 @@ class Room:
 
         await self.events_system.event_skip.active(self, user_id, [])
         return True, "已处理。"
-
-    async def resolve_vote(self) -> None:
-        """结算放逐投票并进入下一夜（或结束游戏）。"""
-        if self.state != "vote":
-            return
-
-        counts = Counter(v for v in self.votes.values() if v)
-        if not counts:
-            await self.broadcast("投票结束: 无人被放逐。")
-            await self.start_night()
-            return
-
-        most_common = counts.most_common()
-        top_target, top_count = most_common[0]
-        if len(most_common) > 1 and most_common[1][1] == top_count:
-            await self.broadcast("投票结束: 票数相同，无人被放逐。")
-            await self.start_night()
-            return
-
-        target_player = self.id_2_player.get(top_target)
-        if target_player and target_player.alive:
-            await self.kill_player(target_player, "白天投票放逐")
-            await self.broadcast(f"投票结束: {target_player.seat}号 被放逐。")
-        else:
-            await self.broadcast("投票结束: 目标无效，无人被放逐。")
-
-        winner = self.check_winner()
-        if winner:
-            await self.broadcast(
-                "游戏结束: " + ("好人胜利！" if winner == "good" else "狼人胜利！")
-            )
-            self.state = "ended"
-            return
-
-        await self.start_night()
-
-    async def try_advance(self) -> None:
-        """已弃用：流程推进由事件系统（lock/unlock）控制。"""
-        return

@@ -456,7 +456,6 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
                 "用法：`wft.skill <动作> [参数]`（私聊可用 `-g <群号>` 指定群）"
             )
         await room.events_system.event_use_skill.active(room, user_id, arg_list)
-        await room.try_advance()
 
 
 @CommandVote.handle()
@@ -474,7 +473,6 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
         ok, msg = await room.cast_vote(event.get_user_id(), int(text))
         if not ok:
             await CommandVote.finish(msg)
-        await room.try_advance()
         await CommandVote.finish(msg)
 
 
@@ -522,5 +520,4 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
         ok, msg = await room.skip(user_id)
         if not ok:
             await CommandSkip.finish(msg)
-        await room.try_advance()
         await CommandSkip.finish(msg)
