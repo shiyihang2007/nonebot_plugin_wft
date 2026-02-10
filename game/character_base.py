@@ -26,11 +26,13 @@ class CharacterBase:
         self.room = room
         self.player = player
 
-        room.events_system.event_night_start.listeners.append(self.on_night_start)
-        room.events_system.event_day_start.listeners.append(self.on_day_start)
-        room.events_system.event_vote_start.listeners.append(self.on_vote_start)
-        room.events_system.event_use_skill.listeners.append(self.on_use_skill)
-        room.events_system.event_person_killed.listeners.append(self.on_person_killed)
+        room.events_system.event_night_start.add_listener(self.on_night_start, priority=0)
+        room.events_system.event_day_start.add_listener(self.on_day_start, priority=0)
+        room.events_system.event_vote_start.add_listener(self.on_vote_start, priority=0)
+        room.events_system.event_use_skill.add_listener(self.on_use_skill, priority=0)
+        room.events_system.event_person_killed.add_listener(
+            self.on_person_killed, priority=0
+        )
 
     @property
     def user_id(self) -> str:
