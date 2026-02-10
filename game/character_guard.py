@@ -50,12 +50,11 @@ class CharacterGuard(CharacterGod):
             return
 
         seat = int(args[1])
-        ok, msg = await self.room.guard_protect(self.user_id, seat)
+        ok, msg = await self._protect(seat)
         await self.send_private(msg)
         if not ok:
             return
 
-        self.room.night_guard_done_user_ids.add(self.user_id)
         await self.room.events_system.event_night_end.unlock(
             self.room, self.user_id, []
         )
@@ -75,3 +74,24 @@ class CharacterGuard(CharacterGod):
         await self.room.events_system.event_night_end.unlock(
             self.room, self.user_id, []
         )
+
+    async def _protect(self, seat: int) -> tuple[bool, str]:
+        """守卫守护目标（仅修改房间的“夜晚结算”通用数据）。"""
+        if self.room.state != "night":
+            return False, "现在不是夜晚阶段。"
+        if not self.alive:
+            return False, "你不在游戏中，或已死亡。"
+
+        target = self.room.get_player_by_seat(seat)
+        if not target:
+            return False, "目标编号无效。"
+        if not target.alive:
+            return False, "目标已死亡。"
+
+        last = self.room.guard_last_target_by_user_id.get(self.user_id)
+        if last and last == target.user_id:
+            return False, "不能连续两晚守护同一名玩家。"
+
+        self.room.night_guard_target_by_user_id[self.user_id] = target.user_id
+        self.room.night_guard_done_user_ids.add(self.user_id)
+        return True, f"你将守护 {target.seat}号。"

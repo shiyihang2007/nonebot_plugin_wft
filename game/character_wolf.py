@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from .character_base import CharacterBase
@@ -49,7 +50,7 @@ class CharacterWolf(CharacterBase):
 
         seat = int(args[1])
         was_done = self.user_id in self.room.night_wolf_done_user_ids
-        ok, msg = await self.room.wolf_vote_kill(self.user_id, seat)
+        ok, msg = await self._vote_kill(seat)
         await self.send_private(msg)
 
         if not ok:
@@ -71,10 +72,62 @@ class CharacterWolf(CharacterBase):
         was_done = self.user_id in self.room.night_wolf_done_user_ids
         if not was_done:
             self.room.night_wolf_done_user_ids.add(self.user_id)
-            self.room._lock_night_kill_if_possible()
+            self._lock_kill_if_possible()
             await self.send_private("你已放弃本夜击杀投票。")
 
         await self._after_wolf_response(was_done)
+
+    def _lock_kill_if_possible(self) -> None:
+        """尝试锁定狼刀结果（多数票或全员回应）。"""
+        if self.room.night_kill_locked:
+            return
+        wolves = self.room.alive_role_user_ids("wolf")
+        if not wolves:
+            self.room.night_kill_locked = True
+            self.room.night_kill_target_user_id = None
+            return
+
+        votes = {uid: self.room.night_kill_votes.get(uid) for uid in wolves}
+        votes = {uid: v for uid, v in votes.items() if v}
+
+        if votes:
+            counts = Counter(votes.values())
+            top_target, top_count = counts.most_common(1)[0]
+            if top_count > len(wolves) / 2:
+                self.room.night_kill_locked = True
+                self.room.night_kill_target_user_id = top_target
+                return
+
+        if wolves.issubset(self.room.night_wolf_done_user_ids):
+            self.room.night_kill_locked = True
+            self.room.night_kill_target_user_id = None
+
+    async def _vote_kill(self, seat: int) -> tuple[bool, str]:
+        """狼人击杀投票（仅修改房间的“夜晚结算”通用数据）。"""
+        if self.room.state != "night":
+            return False, "现在不是夜晚阶段。"
+        if self.room.night_kill_locked:
+            return False, "狼人行动已锁定。"
+        if not self.alive:
+            return False, "你不在游戏中，或已死亡。"
+
+        target = self.room.get_player_by_seat(seat)
+        if not target:
+            return False, "目标编号无效。"
+        if not target.alive:
+            return False, "目标已死亡。"
+        if target.user_id == self.user_id:
+            return False, "不能选择自己作为击杀目标。"
+
+        self.room.night_kill_votes[self.user_id] = target.user_id
+        self.room.night_wolf_done_user_ids.add(self.user_id)
+        self._lock_kill_if_possible()
+        if self.room.night_kill_locked:
+            if self.room.night_kill_target_user_id:
+                victim = self.room.id_2_player[self.room.night_kill_target_user_id]
+                return True, f"已投票击杀 {victim.seat}号。狼人行动已锁定。"
+            return True, "已投票。狼人行动已锁定: 本夜无人死亡 (票型未达成多数) 。"
+        return True, f"已投票击杀 {target.seat}号。"
 
     async def _after_wolf_response(self, was_done: bool) -> None:
         """狼人响应后推进流程：

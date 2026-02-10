@@ -80,10 +80,9 @@ class CharacterWitch(CharacterGod):
             if not self.has_antidote:
                 await self.send_private("你的解药已用完。")
                 return
-            ok, msg = await self.room.witch_save(self.user_id)
+            ok, msg = await self._save()
             if ok:
                 self.has_antidote = False
-                self.room.night_witch_done_user_ids.add(self.user_id)
             await self.send_private(msg)
             if ok:
                 await self.room.events_system.event_night_end.unlock(
@@ -99,10 +98,9 @@ class CharacterWitch(CharacterGod):
                 await self.send_private("用法：`/wft skill poison <编号>`（编号需要是数字）")
                 return
             seat = int(args[1])
-            ok, msg = await self.room.witch_poison(self.user_id, seat)
+            ok, msg = await self._poison(seat)
             if ok:
                 self.has_poison = False
-                self.room.night_witch_done_user_ids.add(self.user_id)
             await self.send_private(msg)
             if ok:
                 await self.room.events_system.event_night_end.unlock(
@@ -125,3 +123,38 @@ class CharacterWitch(CharacterGod):
         self.room.night_witch_done_user_ids.add(self.user_id)
         await self.send_private("你已放弃本夜用药。")
         await self.room.events_system.event_night_end.unlock(self.room, self.user_id, [])
+
+    async def _save(self) -> tuple[bool, str]:
+        """使用解药取消本夜狼刀（仅修改房间的“夜晚结算”通用数据）。"""
+        if self.room.state != "night":
+            return False, "现在不是夜晚阶段。"
+        if self.room.night_witch_saved:
+            return False, "本夜已使用过解药。"
+        if not self.room.night_kill_target_user_id:
+            return False, "当前没有可救的人 (狼刀未确定或本夜平安) 。"
+
+        self.room.night_witch_saved = True
+        self.room.night_witch_done_user_ids.add(self.user_id)
+        victim = self.room.id_2_player.get(self.room.night_kill_target_user_id)
+        if victim:
+            return True, f"你使用了解药，救下了 {victim.seat}号。"
+        return True, "你使用了解药。"
+
+    async def _poison(self, seat: int) -> tuple[bool, str]:
+        """对玩家下毒（仅修改房间的“夜晚结算”通用数据）。"""
+        if self.room.state != "night":
+            return False, "现在不是夜晚阶段。"
+
+        target = self.room.get_player_by_seat(seat)
+        if not target:
+            return False, "目标编号无效。"
+        if not target.alive:
+            return False, "目标已死亡。"
+        if target.user_id == self.user_id:
+            return False, "不能对自己使用毒药。"
+        if self.user_id in self.room.night_witch_poison_target_by_user_id:
+            return False, "你本夜已经使用过毒药。"
+
+        self.room.night_witch_poison_target_by_user_id[self.user_id] = target.user_id
+        self.room.night_witch_done_user_ids.add(self.user_id)
+        return True, f"你对 {target.seat}号 使用了毒药。"

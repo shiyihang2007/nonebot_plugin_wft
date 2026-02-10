@@ -58,7 +58,7 @@ class CharacterSeer(CharacterGod):
             return
 
         seat = int(args[1])
-        ok, result = self.room.seer_check(seat)
+        ok, result = self._check(seat)
         if not ok:
             await self.send_private(result)
             return
@@ -106,5 +106,17 @@ class CharacterSeer(CharacterGod):
             return
 
         seat = int(args[0])
-        _, result = self.room.seer_check(seat)
+        _, result = self._check(seat)
         await self.send_private(result)
+
+    def _check(self, seat: int) -> tuple[bool, str]:
+        """返回预言家对指定座位的查验结果文本（狼人/好人）。"""
+        target = self.room.get_player_by_seat(seat)
+        if not target:
+            return False, "目标编号无效。"
+        if not target.alive:
+            return False, "目标已死亡。"
+        if not target.role:
+            return False, "目标身份未知。"
+        result = "狼人" if target.role.camp == "wolf" else "好人"
+        return True, f"查验结果: {target.seat}号 是 {result}。"
