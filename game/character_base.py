@@ -30,6 +30,7 @@ class CharacterBase:
         room.events_system.event_day_start.add_listener(self.on_day_start, priority=0)
         room.events_system.event_vote_start.add_listener(self.on_vote_start, priority=0)
         room.events_system.event_use_skill.add_listener(self.on_use_skill, priority=0)
+        room.events_system.event_skip.add_listener(self.on_skip, priority=0)
         room.events_system.event_person_killed.add_listener(
             self.on_person_killed, priority=0
         )
@@ -64,6 +65,10 @@ class CharacterBase:
 
     async def on_use_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
         """玩家触发了 `/wft skill ...`。"""
+        return
+
+    async def on_skip(self, room: Any, user_id: str | None, args: list[str]) -> None:
+        """玩家触发了 `/wft skip`。"""
         return
 
     async def on_person_killed(

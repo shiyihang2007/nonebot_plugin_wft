@@ -19,6 +19,8 @@ class CharacterGuard(CharacterGod):
     ) -> None:
         if not self.alive:
             return
+        # 等待“守卫动作”完成：为 night_end 增加一个锁
+        self.room.events_system.event_night_end.lock()
         await self.send_private(
             "天黑了，你是守卫。\n"
             "请使用 `/wft skill guard <编号>` 守护一名玩家（例如：`/wft skill guard 3`），"
@@ -50,5 +52,26 @@ class CharacterGuard(CharacterGod):
         seat = int(args[1])
         ok, msg = await self.room.guard_protect(self.user_id, seat)
         await self.send_private(msg)
-        if ok:
-            await self.room.try_advance()
+        if not ok:
+            return
+
+        self.room.night_guard_done_user_ids.add(self.user_id)
+        await self.room.events_system.event_night_end.unlock(
+            self.room, self.user_id, []
+        )
+
+    async def on_skip(
+        self, room: Any, user_id: str | None, args: list[str]
+    ) -> None:
+        if not self.alive or user_id != self.user_id:
+            return
+        if self.room.state != "night":
+            return
+        if self.user_id in self.room.night_guard_done_user_ids:
+            return
+
+        self.room.night_guard_done_user_ids.add(self.user_id)
+        await self.send_private("你已放弃本夜守护。")
+        await self.room.events_system.event_night_end.unlock(
+            self.room, self.user_id, []
+        )

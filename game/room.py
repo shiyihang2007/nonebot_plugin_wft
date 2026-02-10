@@ -158,6 +158,7 @@ class Room:
         self.night_wolf_done_user_ids: set[str] = set()
         self.night_kill_target_user_id: str | None = None
         self.night_kill_locked: bool = False
+        self._night_wolf_locked_event_fired: bool = False
         self.night_seer_done_user_ids: set[str] = set()
 
         self.night_guard_target_by_user_id: dict[str, str] = {}
@@ -413,6 +414,7 @@ class Room:
         self.night_wolf_done_user_ids = set()
         self.night_kill_target_user_id = None
         self.night_kill_locked = False
+        self._night_wolf_locked_event_fired = False
         self.night_seer_done_user_ids = set()
         self.last_night_death_user_ids = []
 
@@ -796,26 +798,9 @@ class Room:
         if self.night_kill_locked:
             if self.night_kill_target_user_id:
                 victim = self.id_2_player[self.night_kill_target_user_id]
-                await self._notify_witches_of_attack(victim)
                 return True, f"已投票击杀 {victim.seat}号。狼人行动已锁定。"
             return True, "已投票。狼人行动已锁定: 本夜无人死亡 (票型未达成多数) 。"
         return True, f"已投票击杀 {target.seat}号。"
-
-    async def _notify_witches_of_attack(self, victim: Player) -> None:
-        """通知存活女巫当前已锁定的狼刀目标（用于决定是否用解药）。"""
-        witches = [
-            p
-            for p in self.player_list
-            if p.alive and p.role and p.role.role_id == "witch"
-        ]
-        if not witches:
-            return
-        for w in witches:
-            await self.post_to_player(
-                w.user_id,
-                f"女巫提示: 狼刀落在 {victim.seat}号。\n"
-                "你可以使用 `/wft skill save` 使用解药救人，或 `/wft skip` 放弃本夜行动。",
-            )
 
     async def guard_protect(self, guard_user_id: str, seat: int) -> tuple[bool, str]:
         """守卫选择本夜的守护目标。"""

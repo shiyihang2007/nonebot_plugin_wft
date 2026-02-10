@@ -15,11 +15,20 @@ class CharacterSeer(CharacterGod):
     role_id = "seer"
     name = "预言家"
 
+    def __init__(self, room, player) -> None:
+        super().__init__(room, player)
+        # 预言家专属事件：仅当场上存在预言家时才会创建/使用该事件
+        room.events_system.get_or_create_event("seer_check").add_listener(
+            self.on_seer_check_event, priority=0
+        )
+
     async def on_night_start(
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
         if not self.alive:
             return
+        # 等待“预言家动作”完成：为 night_end 增加一个锁
+        self.room.events_system.event_night_end.lock()
         await self.send_private(
             "天黑了，你是预言家。\n"
             "请使用 `/wft skill check <编号>` 查验身份（例如：`/wft skill check 3`），"
@@ -55,5 +64,47 @@ class CharacterSeer(CharacterGod):
             return
 
         self.room.night_seer_done_user_ids.add(self.user_id)
+        await self.room.events_system.get_or_create_event("seer_check").active(
+            self.room, self.user_id, [args[1], result]
+        )
+        await self.room.events_system.event_night_end.unlock(
+            self.room, self.user_id, []
+        )
+
+    async def on_skip(
+        self, room: Any, user_id: str | None, args: list[str]
+    ) -> None:
+        if not self.alive or user_id != self.user_id:
+            return
+        if self.room.state != "night":
+            return
+        if self.user_id in self.room.night_seer_done_user_ids:
+            return
+
+        self.room.night_seer_done_user_ids.add(self.user_id)
+        await self.send_private("你已放弃本夜查验。")
+        await self.room.events_system.event_night_end.unlock(
+            self.room, self.user_id, []
+        )
+
+    async def on_seer_check_event(
+        self, room: Any, user_id: str | None, args: list[str]
+    ) -> None:
+        """事件 7：预言家查人。"""
+        if not self.alive or user_id != self.user_id:
+            return
+        if not args:
+            await self.send_private("用法：`/wft skill check <编号>`（编号需要是数字）")
+            return
+
+        if len(args) >= 2:
+            await self.send_private(args[1])
+            return
+
+        if not args[0].isdigit():
+            await self.send_private("用法：`/wft skill check <编号>`（编号需要是数字）")
+            return
+
+        seat = int(args[0])
+        _, result = self.room.seer_check(seat)
         await self.send_private(result)
-        await self.room.try_advance()
