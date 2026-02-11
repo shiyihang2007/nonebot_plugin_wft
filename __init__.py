@@ -470,10 +470,7 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
         text = args.extract_plain_text().strip()
         if not text.isdigit():
             await CommandVote.finish("用法：`wft.vote <编号>`（编号需要是数字）")
-        ok, msg = await room.cast_vote(event.get_user_id(), int(text))
-        if not ok:
-            await CommandVote.finish(msg)
-        await CommandVote.finish(msg)
+        await room.events_system.event_vote.active(room, event.get_user_id(), [text])
 
 
 @CommandSkip.handle()
@@ -517,7 +514,4 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
             if room.state != "night":
                 await CommandSkip.finish("当前阶段请在群聊中使用该指令。")
 
-        ok, msg = await room.skip(user_id)
-        if not ok:
-            await CommandSkip.finish(msg)
-        await CommandSkip.finish(msg)
+        await room.events_system.event_skip.active(room, user_id, [])

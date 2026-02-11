@@ -1,4 +1,4 @@
-"""狼人：夜晚投票击杀目标（多数票可锁定击杀）。"""
+"""狼人：夜晚投票击杀目标。"""
 
 from __future__ import annotations
 
@@ -132,7 +132,7 @@ class CharacterWolf(CharacterBase):
             top_target, top_count = counts.most_common(1)[0]
             if top_count > len(wolves) / 2:
                 await self.event_wolf_locked.active(self.room, self.name, [top_target])
-                self.room.pending_death_records.append((top_target, "被狼刀了"))
+                self.room.pending_death_records[top_target] = "被狼刀了"
                 return
         if all(w.kill_responded for w in wolves):
             await self.event_wolf_locked.active(self.room, self.name, [""])

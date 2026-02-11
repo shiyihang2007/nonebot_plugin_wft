@@ -7,7 +7,6 @@
 
 - `game_start`：游戏开始
 - `night_start`：夜晚开始
-- `wolf_locked`：狼人刀口锁定
 - `night_end`：夜晚结束（结算夜晚）
 - `person_killed`：玩家死亡（可携带“下一事件”参数）
 - `day_start`：白天开始
@@ -158,10 +157,9 @@ class Room:
         self.day_speech_index: int = 0
 
         self.votes: dict[str, str | None] = {}
-        self.last_night_death_user_ids: list[str] = []
 
         # 事件驱动流程的运行时状态（尽量保持“可扩展”且不耦合具体角色实现）。
-        self.pending_death_records: list[tuple[str, str]] = []  # (user_id, reason)
+        self.pending_death_records: dict[str, str] = {}  # (user_id, reason)
         self.vote_pending_user_ids: set[str] = set()
 
     async def broadcast(self, message: str) -> None:
@@ -259,20 +257,18 @@ class Room:
         """
         es = self.events_system
 
-        es.event_game_start.add_listener(self._on_game_start, priority=0)
-        es.event_game_start.add_listener(
-            self._on_game_start_to_night_start, priority=-10
-        )
+        es.event_game_start.add_listener(self._on_game_start, priority=-10)
 
         es.event_night_start.add_listener(self._on_night_start, priority=10)
         es.event_night_start.add_listener(
             self._on_night_start_kick_night_end, priority=-10
         )
-        es.event_night_end.add_listener(self._on_night_end, priority=0)
+        es.event_night_end.add_listener(self._on_night_end, priority=-10)
         es.event_day_start.add_listener(self._on_day_start, priority=0)
         es.event_vote_start.add_listener(self._on_vote_start, priority=0)
         es.event_vote.add_listener(self._on_vote_input, priority=0)
-        es.event_skip.add_listener(self._on_skip_input, priority=0)
+        es.event_skip.add_listener(self._on_skip_input_speech, priority=0)
+        es.event_skip.add_listener(self._on_skip_input_vote, priority=0)
 
         es.event_vote_end.add_listener(self._on_vote_end, priority=0)
 
@@ -290,7 +286,7 @@ class Room:
 
         # 重置对局运行时状态
         self.events_system = EventSystem()
-        self.pending_death_records = []
+        self.pending_death_records = {}
         self.vote_pending_user_ids = set()
         for p in self.player_list:
             p.alive = True
@@ -306,7 +302,7 @@ class Room:
                 continue
             role_pool.extend([cls] * count)
         if len(role_pool) > len(self.player_list):
-            await self.broadcast("已添加的角色数量超过玩家人数，请先删角色。")
+            await self.broadcast("已添加的角色数量超过玩家人数，请先删除多余角色。")
             return
         if len(role_pool) < len(self.player_list):
             role_pool.extend(
@@ -321,11 +317,12 @@ class Room:
         for player, role_cls in zip(self.player_list, role_pool):
             player.role = role_cls(self, player)
 
-        seats_text = " ".join(
-            f"{p.seat}号 [CQ:at,qq={int(p.user_id)}]" for p in self.player_list
+        seats_text = "\n".join(
+            f"  {p.seat}号 [CQ:at,qq={int(p.user_id)}]" for p in self.player_list
         )
-        await self.broadcast(f"游戏开始！座位顺序: {seats_text}")
-
+        await self.broadcast(
+            f"游戏开始！\n座位顺序: \n{seats_text}\n请在私聊中查收身份牌"
+        )
         for p in self.player_list:
             if not p.role:
                 continue
@@ -365,12 +362,6 @@ class Room:
     async def _on_game_start(
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
-        """游戏开始事件：这里只做最小处理，真正推进由桥接监听器完成。"""
-        return
-
-    async def _on_game_start_to_night_start(
-        self, room: object, user_id: str | None, args: list[str]
-    ) -> None:
         """桥接：game_start -> night_start（使用 lock/unlock 触发）。"""
         self.events_system.event_night_start.lock()
         await self.events_system.event_night_start.unlock(self, None, [])
@@ -380,8 +371,7 @@ class Room:
     ) -> None:
         """夜晚开始：重置夜晚运行时状态并广播提示。"""
         self.state = "night"
-        self.last_night_death_user_ids = []
-        self.pending_death_records = []
+        self.pending_death_records = {}
         await self.broadcast("天黑请闭眼。")
 
     async def _on_night_start_kick_night_end(
@@ -412,7 +402,7 @@ class Room:
                 await self.events_system.event_person_killed.active(
                     self, victim_user_id, [reason, "day_start"]
                 )
-            self.pending_death_records = []
+            self.pending_death_records = {}
             return
         # 死亡事件发送后尝试解锁以确保在无阻塞时事件流程正常推进
         await self.events_system.event_day_start.unlock(self, None, [])
@@ -447,6 +437,38 @@ class Room:
             f"白天发言阶段开始（第{self.day_count}天）：按编号顺序{direction}依次发言。\n"
             f"请 {first.seat}号 发言。发言结束后发送 `/wft skip` 进入下一位。"
         )
+
+    async def _on_skip_input_speech(
+        self, room: object, user_id: str | None, args: list[str]
+    ) -> None:
+        """玩家结束发言"""
+        if not user_id or self.state != "speech":
+            return
+        if self.day_speech_index < 0 or self.day_speech_index >= len(
+            self.day_speech_order_user_ids
+        ):
+            return
+        current_id = self.day_speech_order_user_ids[self.day_speech_index]
+        if user_id != current_id:
+            current_player = self.id_2_player.get(current_id)
+            if current_player:
+                await self.broadcast(
+                    f"还没轮到你发言。当前请 {current_player.seat}号 发言。"
+                )
+            return
+
+        self.day_speech_index += 1
+        if self.day_speech_index >= len(self.day_speech_order_user_ids):
+            await self.broadcast("发言结束，开始投票。")
+            await self.events_system.event_vote_start.active(self, None, [])
+            return
+
+        next_id = self.day_speech_order_user_ids[self.day_speech_index]
+        next_player = self.id_2_player.get(next_id)
+        if next_player:
+            await self.broadcast(
+                f"请 {next_player.seat}号 发言。发言结束后发送 `/wft skip`。"
+            )
 
     async def _on_vote_start(
         self, room: object, user_id: str | None, args: list[str]
@@ -488,57 +510,18 @@ class Room:
             self.vote_pending_user_ids.remove(user_id)
             await self.events_system.event_vote_end.unlock(self, user_id, [])
 
-    async def _on_skip_input(
+    async def _on_skip_input_vote(
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
-        """玩家跳过输入：用于白天发言推进/投票弃票；夜晚跳过交给角色监听器处理。"""
-        if not user_id:
+        """玩家跳过投票"""
+        if not user_id or self.state != "vote":
             return
-
-        if self.state == "speech":
-            await self._handle_speech_skip(user_id)
-            return
-
-        if self.state == "vote":
-            await self._handle_vote_skip(user_id)
-            return
-
-        # night/lobby/ended：这里不处理，让角色/上层决定
-        return
-
-    async def _handle_speech_skip(self, user_id: str) -> None:
-        current_id = self.current_speaker_user_id()
-        if not current_id:
-            return
-        if user_id != current_id:
-            current_player = self.id_2_player.get(current_id)
-            if current_player:
-                await self.broadcast(
-                    f"还没轮到你发言。当前请 {current_player.seat}号 发言。"
-                )
-            return
-
-        self.day_speech_index += 1
-        if self.day_speech_index >= len(self.day_speech_order_user_ids):
-            await self.broadcast("发言结束，开始投票。")
-            await self.events_system.event_vote_start.active(self, None, [])
-            return
-
-        next_id = self.day_speech_order_user_ids[self.day_speech_index]
-        next_player = self.id_2_player.get(next_id)
-        if next_player:
-            await self.broadcast(
-                f"请 {next_player.seat}号 发言。发言结束后发送 `/wft skip`。"
-            )
-
-    async def _handle_vote_skip(self, user_id: str) -> None:
         voter = self.id_2_player.get(user_id)
         if not voter or not voter.alive:
             return
 
         self.votes[user_id] = None
         await self.broadcast(f"{voter.seat}号 弃票。")
-
         if user_id in self.vote_pending_user_ids:
             self.vote_pending_user_ids.remove(user_id)
             await self.events_system.event_vote_end.unlock(self, user_id, [])
@@ -610,13 +593,3 @@ class Room:
         if len(wolves) >= len(goods):
             return "wolf"
         return None
-
-    def current_speaker_user_id(self) -> str | None:
-        """在白天发言阶段返回当前发言者的 user_id。"""
-        if self.state != "speech":
-            return None
-        if self.day_speech_index < 0 or self.day_speech_index >= len(
-            self.day_speech_order_user_ids
-        ):
-            return None
-        return self.day_speech_order_user_ids[self.day_speech_index]

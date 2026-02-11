@@ -6,8 +6,8 @@
 
 ## TODO
 
-- [] 在夜晚行动造成角色死亡的，更改 room.pending_death_records
-- [] 白天投票响应改为角色基类的监听器
+- [X] 在夜晚行动造成角色死亡的，更改 room.pending_death_records
+- [ ] 白天投票响应改为角色基类的监听器
 
 ## 使用
 

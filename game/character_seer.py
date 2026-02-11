@@ -73,9 +73,7 @@ class CharacterSeer(CharacterGod):
             self.room, self.user_id, []
         )
 
-    async def on_skip(
-        self, room: Any, user_id: str | None, args: list[str]
-    ) -> None:
+    async def on_skip(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if not self.alive or user_id != self.user_id:
             return
         if self.room.state != "night":

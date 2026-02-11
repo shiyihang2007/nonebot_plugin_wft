@@ -16,23 +16,25 @@ class CharacterGuard(CharacterGod):
 
     def __init__(self, room, player) -> None:
         super().__init__(room, player)
-        self._night_done: bool = False
-        self._night_target_user_id: str | None = None
-        self._last_target_user_id: str | None = None
+        self._guard_user_id: str | None = None
+        self._last_guard_user_id: str | None = None
+        self._night_responded: bool = False
+
+        self.room.events_system.event_night_end.add_listener(self.on_night_end)
 
     async def on_night_start(
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
         if not self.alive:
             return
-        self._night_done = False
-        self._night_target_user_id = None
-        # 等待“守卫动作”完成：为 night_end 增加一个锁
+        self._guard_user_id = None
         self.room.events_system.event_night_end.lock()
+        self._night_responded = False
         await self.send_private(
-            "天黑了，你是守卫。\n"
-            "请使用 `/wft skill guard <编号>` 守护一名玩家（例如：`/wft skill guard 3`），"
-            "或使用 `/wft skip` 放弃本夜守护。"
+            "你是守卫，你可以：\n"
+            "- 使用 `/wft skill guard <编号>` 守护一名玩家（例如：`/wft skill guard 3`）；"
+            "- 使用 `/wft skip` 放弃本夜守护；"
+            "在天亮前你都有机会改变你的选择。"
         )
 
     async def on_use_skill(
@@ -41,10 +43,6 @@ class CharacterGuard(CharacterGod):
         if not self.alive or user_id != self.user_id:
             return
         if self.room.state != "night":
-            await self.send_private("现在不是夜晚阶段，无法守护。")
-            return
-        if self._night_done:
-            await self.send_private("你今晚已经完成守护/放弃，无需重复操作。")
             return
         if not args:
             await self.send_private("用法：`/wft skill guard <编号>`")
@@ -58,53 +56,50 @@ class CharacterGuard(CharacterGod):
             return
 
         seat = int(args[1])
-        ok, msg = await self._protect(seat)
-        await self.send_private(msg)
-        if not ok:
+        target = self.room.get_player_by_seat(seat)
+        if not target:
+            await self.send_private("目标编号无效。")
+            return
+        if not target.alive:
+            await self.send_private("目标已死亡。")
             return
 
-        await self.room.events_system.event_night_end.unlock(
-            self.room, self.user_id, []
-        )
+        last = self._last_guard_user_id
+        if last and last == target.user_id:
+            await self.send_private("不能连续两晚守护同一名玩家。")
+            return
 
-    async def on_skip(
-        self, room: Any, user_id: str | None, args: list[str]
-    ) -> None:
+        await self.send_private(
+            f"你将{'改为' if self._guard_user_id else ''}守护 {target.seat}号。"
+        )
+        self._guard_user_id = target.user_id
+        if not self._night_responded:
+            await self.room.events_system.event_night_end.unlock(
+                self.room, self.user_id, []
+            )
+            self._night_responded = True
+
+    async def on_skip(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if not self.alive or user_id != self.user_id:
             return
         if self.room.state != "night":
             return
-        if self._night_done:
-            return
 
-        self._night_done = True
         await self.send_private("你已放弃本夜守护。")
-        await self.room.events_system.event_night_end.unlock(
-            self.room, self.user_id, []
-        )
+        self._guard_user_id = None
+        if not self._night_responded:
+            await self.room.events_system.event_night_end.unlock(
+                self.room, self.user_id, []
+            )
+            self._night_responded = True
 
-    def get_night_protect_target_user_id(self) -> str | None:
-        """返回本夜守护目标的 user_id；未守护则为 None。"""
-        return self._night_target_user_id
-
-    async def _protect(self, seat: int) -> tuple[bool, str]:
-        """守卫守护目标（仅修改房间的“夜晚结算”通用数据）。"""
-        if self.room.state != "night":
-            return False, "现在不是夜晚阶段。"
-        if not self.alive:
-            return False, "你不在游戏中，或已死亡。"
-
-        target = self.room.get_player_by_seat(seat)
-        if not target:
-            return False, "目标编号无效。"
-        if not target.alive:
-            return False, "目标已死亡。"
-
-        last = self._last_target_user_id
-        if last and last == target.user_id:
-            return False, "不能连续两晚守护同一名玩家。"
-
-        self._night_target_user_id = target.user_id
-        self._night_done = True
-        self._last_target_user_id = target.user_id
-        return True, f"你将守护 {target.seat}号。"
+    async def on_night_end(
+        self, room: Any, user_id: str | None, args: list[str]
+    ) -> None:
+        "注入夜晚结束的处理，将被守护目标从将死列表中除去（如果目标被刀的话）"
+        self._last_guard_user_id = self._guard_user_id
+        if self._guard_user_id not in self.room.pending_death_records:
+            return
+        if self.room.pending_death_records[self._guard_user_id] != "被狼刀了":
+            return
+        del self.room.pending_death_records[self._guard_user_id]
