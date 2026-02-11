@@ -22,17 +22,12 @@ class CharacterBase:
     aliases: ClassVar[list[str]] = []  # 角色别名列表
 
     def __init__(self, room: Room, player: Player) -> None:
-        """将角色绑定到玩家，并注册默认事件监听器。"""
+        """将角色绑定到玩家，并注册通用事件监听器。"""
         self.room = room
         self.player = player
 
-        room.events_system.event_night_start.add_listener(self.on_night_start, priority=0)
-        room.events_system.event_day_start.add_listener(self.on_day_start, priority=0)
-        room.events_system.event_vote_start.add_listener(self.on_vote_start, priority=0)
-        room.events_system.event_use_skill.add_listener(self.on_use_skill, priority=0)
-        room.events_system.event_skip.add_listener(self.on_skip, priority=0)
         room.events_system.event_person_killed.add_listener(
-            self.on_person_killed, priority=0
+            self.on_person_killed_update, priority=-10
         )
 
     @property
@@ -49,30 +44,17 @@ class CharacterBase:
         """给角色所属玩家发送私聊消息。"""
         await self.room.post_to_player(self.user_id, message)
 
-    async def on_night_start(
+    async def on_person_killed_update(
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
-        """夜晚阶段开始（角色通常在此提示自己的行动）。"""
-        return
+        """有人死亡：
+        - `user_id` 为死者，
+        - `args[0]` 携带死亡原因字符串，
+        - `args[1]` 携带下一事件（用于在需要等待玩家操作时阻塞流程，例如猎人亡语）。
 
-    async def on_day_start(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        """白天阶段开始（夜晚结算后）。"""
-        return
-
-    async def on_vote_start(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        """投票阶段开始。"""
-        return
-
-    async def on_use_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        """玩家触发了 `/wft skill ...`。"""
-        return
-
-    async def on_skip(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        """玩家触发了 `/wft skip`。"""
-        return
-
-    async def on_person_killed(
-        self, room: Any, user_id: str | None, args: list[str]
-    ) -> None:
-        """有人死亡：`user_id` 为死者，`args` 携带死亡原因字符串。"""
-        return
+        此监听器判断死者是否为自身并更改自身状态
+        """
+        if user_id != self.user_id:
+            return
+        await self.send_private(f"你已死亡，死因：{args[0]}")
+        self.player.alive = False

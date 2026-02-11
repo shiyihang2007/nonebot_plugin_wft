@@ -13,8 +13,8 @@ from .event_base import EventBase
 class EventSystem:
     """角色监听器使用的一组事件通道。
 
-除固定事件外，也支持在运行时按名称创建事件（用于角色扩展点）。
-"""
+    除固定事件外，也支持在运行时按名称创建事件（用于角色扩展点）。
+    """
 
     def __init__(self) -> None:
         self.events: dict[str, EventBase] = {}
@@ -25,7 +25,6 @@ class EventSystem:
         self.event_day_start = EventBase()
         self.event_vote_start = EventBase()
 
-        self.event_wolf_locked = self._new_event("wolf_locked")  # 4
         self.event_night_end = self._new_event("night_end")  # 10
         self.event_vote_end = self._new_event("vote_end")  # 24
         self.event_day_end = self._new_event("day_end")  # 30

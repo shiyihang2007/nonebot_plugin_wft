@@ -166,7 +166,7 @@ CommandSkip = commandPrefix.command(
     "skip", aliases={"跳过", "过", "不用", "不使用技能"}
 )
 
-room_manager = RoomManager()
+_room_manager = RoomManager()
 
 
 def _resolve_room_for_private_user(
@@ -181,7 +181,7 @@ def _resolve_room_for_private_user(
 
     candidates: list[tuple[str, Room]] = [
         (gid, room)
-        for gid, room in room_manager.rooms.items()
+        for gid, room in _room_manager.rooms.items()
         if user_id in room.id_2_player and room.state != "ended"
     ]
     if not candidates:
@@ -224,7 +224,9 @@ def _extract_group_id_hint(
             return None, tokens, "用法：`wft.skill -g <群号> <动作> [参数]`"
         return tokens[1], tokens[2:], None
 
-    if tokens[0].isdigit() and (tokens[0] in room_manager.rooms or len(tokens[0]) >= 5):
+    if tokens[0].isdigit() and (
+        tokens[0] in _room_manager.rooms or len(tokens[0]) >= 5
+    ):
         return tokens[0], tokens[1:], None
 
     return None, tokens, None
@@ -235,8 +237,8 @@ async def _(bot: Bot, event: MessageEvent):
     if not isinstance(event, GroupMessageEvent):
         await CommandInit.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        old_room = room_manager.rooms.get(group_id)
+    async with _room_manager.lock(group_id):
+        old_room = _room_manager.rooms.get(group_id)
         if old_room:
             if old_room.state != "ended":
                 await CommandInit.finish("请先结束上一局游戏. ")
@@ -248,10 +250,12 @@ async def _(bot: Bot, event: MessageEvent):
             new_room.character_enabled = dict(old_room.character_enabled)
             new_room.settings = dict(old_room.settings)
 
-            room_manager.rooms[group_id] = new_room
-            await CommandInit.finish("上一局已结束，已创建新房间（保留玩家与角色配置）。")
+            _room_manager.rooms[group_id] = new_room
+            await CommandInit.finish(
+                "上一局已结束，已创建新房间（保留玩家与角色配置）。"
+            )
 
-        room_manager.rooms[group_id] = Room(
+        _room_manager.rooms[group_id] = Room(
             group_id, bot.send_group_msg, bot.send_private_msg
         )
         await CommandInit.finish("游戏已创建")
@@ -262,10 +266,10 @@ async def _(event: MessageEvent):
     if not isinstance(event, GroupMessageEvent):
         await CommandEnd.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandEnd.finish("没有正在进行的游戏. ")
-        del room_manager.rooms[group_id]
+        del _room_manager.rooms[group_id]
         await CommandEnd.finish("游戏已结束")
 
 
@@ -274,19 +278,17 @@ async def _(event: MessageEvent):
     if not isinstance(event, GroupMessageEvent):
         await CommandJoin.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandJoin.finish("没有正在进行的游戏. ")
-        room = room_manager.rooms[group_id]
+        room = _room_manager.rooms[group_id]
         if room.state != "lobby":
             await CommandJoin.finish("游戏已开始，无法中途加入。")
         user_id: str = event.get_user_id()
         if user_id in room.id_2_player:
             await CommandJoin.finish("不能重复加入游戏")
         await room.add_player(user_id)
-        await CommandJoin.finish(
-            Message(f"[CQ:at,qq={str(int(user_id))}] 已加入游戏")
-        )
+        await CommandJoin.finish(Message(f"[CQ:at,qq={str(int(user_id))}] 已加入游戏"))
 
 
 @CommandExit.handle()
@@ -294,17 +296,15 @@ async def _(event: MessageEvent):
     if not isinstance(event, GroupMessageEvent):
         await CommandExit.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandExit.finish("没有正在进行的游戏. ")
-        room = room_manager.rooms[group_id]
+        room = _room_manager.rooms[group_id]
         if room.state != "lobby":
             await CommandExit.finish("游戏已开始，无法中途退出。")
         user_id: str = event.get_user_id()
         await room.remove_player(user_id)
-        await CommandExit.finish(
-            Message(f"[CQ:at,qq={str(int(user_id))}] 已离开游戏")
-        )
+        await CommandExit.finish(Message(f"[CQ:at,qq={str(int(user_id))}] 已离开游戏"))
 
 
 @CommandAddrole.handle()
@@ -312,10 +312,10 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
     if not isinstance(event, GroupMessageEvent):
         await CommandAddrole.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandAddrole.finish("没有正在进行的游戏. ")
-        room = room_manager.rooms[group_id]
+        room = _room_manager.rooms[group_id]
         if room.state != "lobby":
             await CommandAddrole.finish("游戏已开始，无法修改角色配置。")
         role_list = args.extract_plain_text().split(" ")
@@ -327,10 +327,10 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
     if not isinstance(event, GroupMessageEvent):
         await CommandRmrole.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandRmrole.finish("没有正在进行的游戏. ")
-        room = room_manager.rooms[group_id]
+        room = _room_manager.rooms[group_id]
         if room.state != "lobby":
             await CommandRmrole.finish("游戏已开始，无法修改角色配置。")
         role_list: list[str] = args.extract_plain_text().split(" ")
@@ -342,10 +342,10 @@ async def _(event: MessageEvent):
     if not isinstance(event, GroupMessageEvent):
         await CommandShowroles.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandShowroles.finish("没有正在进行的游戏. ")
-        room = room_manager.rooms[group_id]
+        room = _room_manager.rooms[group_id]
         if not room.character_enabled:
             await CommandShowroles.finish(
                 "当前未添加任何角色（未配置将默认补足为村民）。"
@@ -362,10 +362,10 @@ async def _(event: MessageEvent):
     if not isinstance(event, GroupMessageEvent):
         await CommandAutoroles.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandAutoroles.finish("没有正在进行的游戏. ")
-        room = room_manager.rooms[group_id]
+        room = _room_manager.rooms[group_id]
         if room.state != "lobby":
             await CommandAutoroles.finish("游戏已开始，无法修改角色配置。")
         n = len(room.player_list)
@@ -399,10 +399,10 @@ async def _(event: MessageEvent):
     if not isinstance(event, GroupMessageEvent):
         await CommandStart.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandStart.finish("没有正在进行的游戏. ")
-        await room_manager.rooms[group_id].start_game()
+        await _room_manager.rooms[group_id].start_game()
 
 
 @CommandSkill.handle()
@@ -434,8 +434,8 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
     if not group_id:
         await CommandSkill.finish("没有正在进行的游戏. ")
 
-    async with room_manager.lock(group_id):
-        room = room_manager.rooms.get(group_id)
+    async with _room_manager.lock(group_id):
+        room = _room_manager.rooms.get(group_id)
         if not room:
             if isinstance(event, GroupMessageEvent):
                 await CommandSkill.finish("没有正在进行的游戏. ")
@@ -463,10 +463,10 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
     if not isinstance(event, GroupMessageEvent):
         await CommandVote.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
-    async with room_manager.lock(group_id):
-        if group_id not in room_manager.rooms or not room_manager.rooms[group_id]:
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandVote.finish("没有正在进行的游戏. ")
-        room = room_manager.rooms[group_id]
+        room = _room_manager.rooms[group_id]
         text = args.extract_plain_text().strip()
         if not text.isdigit():
             await CommandVote.finish("用法：`wft.vote <编号>`（编号需要是数字）")
@@ -503,8 +503,8 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
     if not group_id:
         await CommandSkip.finish("没有正在进行的游戏. ")
 
-    async with room_manager.lock(group_id):
-        room = room_manager.rooms.get(group_id)
+    async with _room_manager.lock(group_id):
+        room = _room_manager.rooms.get(group_id)
         if not room:
             if isinstance(event, GroupMessageEvent):
                 await CommandSkip.finish("没有正在进行的游戏. ")
