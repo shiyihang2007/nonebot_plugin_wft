@@ -19,8 +19,11 @@ class CharacterSeer(CharacterGod):
     def __init__(self, room, player) -> None:
         super().__init__(room, player)
         self._night_done: bool = False
-        # 预言家专属事件：仅当场上存在预言家时才会创建/使用该事件
-        room.events_system.get_or_create_event("seer_check").add_listener(
+
+        self.room.events_system.event_night_start.add_listener(self.on_night_start)
+        self.room.events_system.event_skill.add_listener(self.on_skill)
+        self.room.events_system.event_skip.add_listener(self.on_skip)
+        self.room.events_system.get_or_create_event("seer_check").add_listener(
             self.on_seer_check_event, priority=0
         )
 
@@ -39,9 +42,7 @@ class CharacterSeer(CharacterGod):
             "或使用 `/wft skip` 放弃本夜查验。"
         )
 
-    async def on_use_skill(
-        self, room: Any, user_id: str | None, args: list[str]
-    ) -> None:
+    async def on_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if not self.alive or user_id != self.user_id:
             return
         if self.room.state != "night":

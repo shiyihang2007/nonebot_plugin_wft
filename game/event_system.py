@@ -31,7 +31,7 @@ class EventSystem:
         self.event_game_end = self._new_event("game_end")  # 100
 
         # === 玩家操作事件 ===
-        self.event_use_skill = self._new_event("use_skill")
+        self.event_skill = self._new_event("skill")
         self.event_vote = self._new_event("vote")  # 玩家投票输入
         self.event_skip = self._new_event("skip")  # 玩家跳过/结束发言/弃票/放弃技能
 

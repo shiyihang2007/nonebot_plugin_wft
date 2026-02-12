@@ -21,6 +21,9 @@ class CharacterGuard(CharacterGod):
         self._last_guard_user_id: str | None = None
         self._night_responded: bool = False
 
+        self.room.events_system.event_night_start.add_listener(self.on_night_start)
+        self.room.events_system.event_skill.add_listener(self.on_skill)
+        self.room.events_system.event_skip.add_listener(self.on_skip)
         self.room.events_system.event_night_end.add_listener(self.on_night_end)
 
     async def on_night_start(
@@ -39,9 +42,7 @@ class CharacterGuard(CharacterGod):
             "在天亮前你都有机会改变你的选择。"
         )
 
-    async def on_use_skill(
-        self, room: Any, user_id: str | None, args: list[str]
-    ) -> None:
+    async def on_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if not self.alive or user_id != self.user_id:
             return
         if self.room.state != "night":

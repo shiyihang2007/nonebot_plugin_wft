@@ -27,7 +27,11 @@ class CharacterWolf(CharacterBase):
         self.night_vote_target_user_id: str | None = None
         self.skill_kill_available: bool = True
         self.locked_target_user_id: str | None = None
-        self.event_wolf_locked: EventBase = room.events_system.get_or_create_event(
+
+        self.room.events_system.event_night_start.add_listener(self.on_night_start)
+        self.room.events_system.event_skill.add_listener(self.on_skill)
+        self.room.events_system.event_skip.add_listener(self.on_skip)
+        self.event_wolf_locked: EventBase = self.room.events_system.get_or_create_event(
             "wolf_lock"
         )
         self.event_wolf_locked.add_listener(self.on_wolf_locked)
@@ -49,9 +53,7 @@ class CharacterWolf(CharacterBase):
             "或使用 `/wft skip` 放弃本夜击杀投票。"
         )
 
-    async def on_use_skill(
-        self, room: Any, user_id: str | None, args: list[str]
-    ) -> None:
+    async def on_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if not self.alive or user_id != self.user_id:
             return
         if self.room.state != "night":

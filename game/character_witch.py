@@ -23,6 +23,9 @@ class CharacterWitch(CharacterGod):
         self._skill_available: bool = False
         self._wolf_kill_target_user_id: str | None = None
 
+        self.room.events_system.event_night_start.add_listener(self.on_night_start)
+        self.room.events_system.event_skill.add_listener(self.on_skill)
+        self.room.events_system.event_skip.add_listener(self.on_skip)
         self.event_wolf_lock: EventBase = room.events_system.get_or_create_event(
             "wolf_lock"
         )
@@ -73,9 +76,7 @@ class CharacterWitch(CharacterGod):
         tips.append("- `/wft skip` 放弃使用剩下的药")
         await self.send_private("\n".join(tips))
 
-    async def on_use_skill(
-        self, room: Any, user_id: str | None, args: list[str]
-    ) -> None:
+    async def on_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if not self.alive or user_id != self.user_id:
             return
         if self.room.state != "night":

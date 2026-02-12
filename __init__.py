@@ -22,6 +22,7 @@ from nonebot import (
 from nonebot.typing import T_State
 from nonebot.params import CommandArg
 from nonebot.rule import to_me
+from nonebot.permission import SUPERUSER
 
 from .game.room import Room, get_character_class_by_role_id
 from .room_manager import RoomManager
@@ -63,7 +64,7 @@ async def is_admin(bot: Bot, event: MessageEvent, state: T_State) -> bool:
         )
         user_role: str = user_info["role"]
         # 只允许管理员使用
-        if user_role in ["owner", "admin"]:
+        if user_role in ["owner", "admin"] or await SUPERUSER(bot, event):
             return True
         return False
     # 禁用私聊
@@ -292,7 +293,10 @@ async def _(event: MessageEvent):
         if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandEnd.finish("没有正在进行的游戏. ")
         _room_manager.rooms[group_id].change_setting(
-            "debug", not _room_manager.rooms[group_id].settings["debug"]
+            "debug",
+            not _room_manager.rooms[group_id].settings["debug"]
+            if "debug" in _room_manager.rooms[group_id].settings
+            else True,
         )
         await CommandEnd.finish(
             f"调试模式已{'开启' if _room_manager.rooms[group_id].settings['debug'] else '关闭'}"
@@ -489,7 +493,7 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
             await CommandSkill.finish(
                 "用法：`wft.skill <动作> [参数]`（私聊可用 `-g <群号>` 指定群）"
             )
-        await room.events_system.event_use_skill.active(room, user_id, arg_list)
+        await room.events_system.event_skill.active(room, user_id, arg_list)
 
 
 @CommandVote.handle()
