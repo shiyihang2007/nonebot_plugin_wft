@@ -146,6 +146,7 @@ class Room:
 
         # 对局阶段（用于校验玩家输入；推进由事件系统的 lock/unlock 触发）
         # - lobby：未开始，可加入/配置
+        # - start：开始中
         # - night：夜晚（私聊技能/跳过）
         # - speech：白天轮流发言（群聊 skip 推进）
         # - vote：白天投票（群聊 vote/skip）
@@ -281,7 +282,27 @@ class Room:
             await self.broadcast("游戏已开始，无法重复开始。")
             return
         if len(self.player_list) < 4:
-            await self.broadcast("玩家人数不足 (至少 4 人) 。")
+            if self.settings["debug"]:
+                await self.broadcast("警告：调试模式已启用，在人数不足情况下强行开启")
+            else:
+                await self.broadcast(
+                    f"玩家人数不足 (现有 {len(self.player_list)} 人，至少需要 4 人) 。"
+                )
+                return
+
+        role_pool: list[type[CharacterBase]] = []
+        for cls, count in self.character_enabled.items():
+            if count <= 0:
+                continue
+            role_pool.extend([cls] * count)
+        if len(role_pool) > len(self.player_list):
+            await self.broadcast(
+                f"已添加的角色数量({len(role_pool)})超过玩家人数({len(self.player_list)})，请先删除多余角色。"
+            )
+            return
+
+        if not any(getattr(cls, "camp", None) == "wolf" for cls in role_pool):
+            await self.broadcast("至少需要 1 个狼人角色。")
             return
 
         # 重置对局运行时状态
@@ -295,23 +316,6 @@ class Room:
         self.day_count = 0
         self.day_speech_order_user_ids = []
         self.day_speech_index = 0
-
-        role_pool: list[type[CharacterBase]] = []
-        for cls, count in self.character_enabled.items():
-            if count <= 0:
-                continue
-            role_pool.extend([cls] * count)
-        if len(role_pool) > len(self.player_list):
-            await self.broadcast("已添加的角色数量超过玩家人数，请先删除多余角色。")
-            return
-        if len(role_pool) < len(self.player_list):
-            role_pool.extend(
-                [CharacterPerson] * (len(self.player_list) - len(role_pool))
-            )
-
-        if not any(getattr(cls, "camp", None) == "wolf" for cls in role_pool):
-            await self.broadcast("至少需要 1 个狼人角色。")
-            return
 
         random.shuffle(role_pool)
         for player, role_cls in zip(self.player_list, role_pool):
@@ -363,6 +367,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """桥接：game_start -> night_start（使用 lock/unlock 触发）。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_game_start, 用途 `桥接：game_start -> night_start`"
+        )
         self.events_system.event_night_start.lock()
         await self.events_system.event_night_start.unlock(self, None, [])
 
@@ -370,6 +377,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """夜晚开始：重置夜晚运行时状态并广播提示。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_night_start, 用途 `夜晚开始：重置夜晚运行时状态并广播提示`"
+        )
         self.state = "night"
         self.pending_death_records = {}
         await self.broadcast("天黑请闭眼。")
@@ -378,6 +388,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """兜底推进：night_start 结束时，踢一次 night_end（避免无锁时流程卡死）。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_night_start_kick_night_end, 用途 `兜底推进：night_start 结束时，踢一次 night_end（避免无锁时流程卡死）`"
+        )
         self.events_system.event_night_end.lock()
         await self.events_system.event_night_end.unlock(self, None, [])
 
@@ -385,7 +398,11 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """夜晚结束：结算夜晚行动并发送死亡事件。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_night_end, 用途 `夜晚结束：结算夜晚行动并发送死亡事件`"
+        )
         if self.state != "night":
+            logging.warning("警告: 在不正确的阶段触发了 room._on_night_end")
             return
 
         # 在死亡事件发送前对 day_start 事件加锁，
@@ -411,6 +428,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """白天开始：检查终局；若未结束则进入轮流发言。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_day_start, 用途 `白天开始：检查终局；若未结束则进入轮流发言`"
+        )
         winner = self.check_winner()
         if winner:
             await self.events_system.event_game_end.active(self, None, [winner])
@@ -442,6 +462,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """玩家结束发言"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_skip_input_speech, 用途 `玩家结束发言`"
+        )
         if not user_id or self.state != "speech":
             return
         if self.day_speech_index < 0 or self.day_speech_index >= len(
@@ -474,6 +497,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """开始投票：初始化投票数据，并锁定 vote_end 等待所有存活玩家回应。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_vote_start, 用途 `开始投票：初始化投票数据，并锁定 vote_end 等待所有存活玩家回应`"
+        )
         self.state = "vote"
         self.votes = {}
         alive = self.alive_user_ids()
@@ -490,6 +516,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """玩家投票输入：记录投票并在首次回应时解锁 vote_end。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_vote_input, 用途 `玩家投票输入：记录投票并在首次回应时解锁 vote_end`"
+        )
         if not user_id or self.state != "vote":
             return
         voter = self.id_2_player.get(user_id)
@@ -514,6 +543,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """玩家跳过投票"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_skip_input_vote, 用途 `玩家跳过投票`"
+        )
         if not user_id or self.state != "vote":
             return
         voter = self.id_2_player.get(user_id)
@@ -530,7 +562,13 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """结束投票：结算放逐并发送死亡事件。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_vote_end, 用途 `结束投票：结算放逐并发送死亡事件`"
+        )
         if self.state != "vote":
+            logging.warning(
+                "警告: 监听器 room._on_vote_end 在不正确的阶段 `%s` 被触发", self.state
+            )
             return
 
         counts = Counter(v for v in self.votes.values() if v)
@@ -562,6 +600,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """白天结束：检查终局；若未结束则进入下一夜。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_day_end, 用途 `白天结束：检查终局；若未结束则进入下一夜`"
+        )
         winner = self.check_winner()
         if winner:
             await self.events_system.event_game_end.active(self, None, [winner])
@@ -573,6 +614,9 @@ class Room:
         self, room: object, user_id: str | None, args: list[str]
     ) -> None:
         """终局：广播胜负并结束对局。"""
+        logging.debug(
+            "监听器被触发: 名称 room._on_game_end, 用途 `终局：广播胜负并结束对局`"
+        )
         winner = args[0] if args else None
         if winner == "good":
             await self.broadcast("游戏结束：好人胜利！")

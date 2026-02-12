@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .listener import Listener
@@ -22,7 +23,8 @@ from .listener import Listener
 class EventBase:
     """单个事件：监听器 + 优先级 + 锁计数。"""
 
-    def __init__(self) -> None:
+    def __init__(self, name: str) -> None:
+        self.name = name
         self._listeners: list[tuple[int, Listener]] = []
         self._lock_count: int = 0
         self._pending_trigger: tuple[Any, str | None, list[str]] | None = None
@@ -52,31 +54,32 @@ class EventBase:
 
     async def active(self, room: Any, user_id: str | None, args: list[str]) -> None:
         """强制触发事件：无视锁状态，立即执行监听器。"""
+        logging.debug("事件已触发 %s, 开始执行监听器", self.name)
         for _, listener in sorted(self._listeners, key=lambda x: x[0], reverse=True):
             await listener(room, user_id, args)
+        logging.debug("事件 %s 监听器执行完毕", self.name)
 
     def lock(self) -> None:
         """加锁：计数 +1。"""
         self._lock_count += 1
+        logging.debug("事件 %s 被加锁，当前锁计数 %d", self.name, self._lock_count)
 
-    async def unlock(
-        self, room: Any, user_id: str | None = None, args: list[str] | None = None
-    ) -> None:
+    async def unlock(self, room: Any, user_id: str | None, args: list[str]) -> None:
         """解锁：计数 -1，并在计数归零时触发事件。
 
         - 若当前计数为 0，`unlock()` 仍会触发事件（用于“直接推进”的场景）。
-        - 若计数在本次调用后仍大于 0，则仅记录“待触发参数”，不执行监听器。
+        - 若计数在本次调用后仍大于 0，则不执行监听器。
         """
-        if args is None:
-            args = []
 
         if self._lock_count > 0:
             self._lock_count -= 1
-
-        self._pending_trigger = (room, user_id, args)
-        if self._lock_count != 0 or not self._pending_trigger:
-            return
-
-        pending = self._pending_trigger
-        self._pending_trigger = None
-        await self.active(pending[0], pending[1], pending[2])
+            logging.debug("事件 %s 被解锁，当前锁计数 %d", self.name, self._lock_count)
+            if self._lock_count == 0:
+                await self.active(room, user_id, args)
+        else:
+            logging.warning(
+                "尝试解锁未上锁的事件 `%s`，参数 userid=`%s` args=`%s`",
+                self.name,
+                user_id,
+                str(args),
+            )

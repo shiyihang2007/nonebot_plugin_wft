@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .event_base import EventBase
@@ -39,6 +40,7 @@ class CharacterWitch(CharacterGod):
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
         """等待“女巫动作”：在狼刀锁定后提示女巫并锁定 night_end。"""
+        logging.debug("监听器被触发: 名称 CharacterWitch.on_wolf_locked")
         if not self.alive:
             return
         if self.room.state != "night":

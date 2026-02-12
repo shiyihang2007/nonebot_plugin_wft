@@ -149,21 +149,30 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
 
 commandPrefix = CommandGroup("wft", rule=is_enabled)
 
-CommandInit = commandPrefix.command("init", aliases={"创建", "开房", "初始化"})
+CommandInit = commandPrefix.command("init", aliases={"i", "创建", "开房", "初始化"})
 CommandEnd = commandPrefix.command("end", aliases={"结束", "中止"}, rule=to_me())
+CommandDebug = commandPrefix.command("debug", rule=to_me())
 
-CommandJoin = commandPrefix.command("join", aliases={"加入", "加", "进入", "进"})
-CommandExit = commandPrefix.command("exit", aliases={"退出", "退", "离开", "离"})
-CommandAddrole = commandPrefix.command("addrole", aliases={"添角色", "添"})
-CommandRmrole = commandPrefix.command("rmrole", aliases={"删角色", "删"})
-CommandShowroles = commandPrefix.command("showroles", aliases={"显示角色", "显"})
-CommandAutoroles = commandPrefix.command("autoroles", aliases={"自动角色", "自动"})
-CommandStart = commandPrefix.command("start", aliases={"开始", "启动"})
+CommandJoin = commandPrefix.command("join", aliases={"j", "加入", "加", "进入", "进"})
+CommandExit = commandPrefix.command("exit", aliases={"e", "退出", "退", "离开", "离"})
+CommandShowroles = commandPrefix.command("showplayers", aliases={"显示玩家", "玩家"})
 
-CommandSkill = commandPrefix.command("skill", aliases={"用", "技能", "用技能"})
-CommandVote = commandPrefix.command("vote", aliases={"投", "投票"})
+CommandAddrole = commandPrefix.command("addrole", aliases={"a", "添角色", "添"})
+CommandRmrole = commandPrefix.command("rmrole", aliases={"r", "删角色", "删"})
+CommandShowroles = commandPrefix.command(
+    "showroles", aliases={"d", "displayroles", "显示角色", "显"}
+)
+CommandAutoroles = commandPrefix.command(
+    "autoroles", aliases={"ar", "自动角色", "自动"}
+)
+CommandStart = commandPrefix.command("start", aliases={"s", "开始", "启动"})
+
+CommandSkill = commandPrefix.command(
+    "skill", aliases={"u", "use", "用", "技能", "用技能"}
+)
+CommandVote = commandPrefix.command("vote", aliases={"v", "投", "投票"})
 CommandSkip = commandPrefix.command(
-    "skip", aliases={"跳过", "过", "不用", "不使用技能"}
+    "skip", aliases={"p", "pass", "跳过", "过", "不用", "不使用技能"}
 )
 
 _room_manager = RoomManager()
@@ -243,7 +252,6 @@ async def _(bot: Bot, event: MessageEvent):
             if old_room.state != "ended":
                 await CommandInit.finish("请先结束上一局游戏. ")
 
-            # Game ended: create a fresh room but keep last game's player list + role config.
             new_room = Room(group_id, bot.send_group_msg, bot.send_private_msg)
             for p in old_room.player_list:
                 await new_room.add_player(p.user_id)
@@ -269,8 +277,26 @@ async def _(event: MessageEvent):
     async with _room_manager.lock(group_id):
         if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandEnd.finish("没有正在进行的游戏. ")
-        del _room_manager.rooms[group_id]
+        await _room_manager.rooms[group_id].events_system.event_game_end.active(
+            _room_manager.rooms[group_id], None, []
+        )
         await CommandEnd.finish("游戏已结束")
+
+
+@CommandDebug.handle()
+async def _(event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandEnd.finish("请在群聊中使用该指令。")
+    group_id: str = str(event.group_id)
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
+            await CommandEnd.finish("没有正在进行的游戏. ")
+        _room_manager.rooms[group_id].change_setting(
+            "debug", not _room_manager.rooms[group_id].settings["debug"]
+        )
+        await CommandEnd.finish(
+            f"调试模式已{'开启' if _room_manager.rooms[group_id].settings['debug'] else '关闭'}"
+        )
 
 
 @CommandJoin.handle()
@@ -385,10 +411,18 @@ async def _(event: MessageEvent):
         room.character_enabled.clear()
         wolf_cls = get_character_class_by_role_id("wolf")
         seer_cls = get_character_class_by_role_id("seer")
-        if not wolf_cls or not seer_cls:
-            await CommandAutoroles.finish("角色加载异常：缺少狼人/预言家角色定义。")
+        person_cls = get_character_class_by_role_id("person")
+        if not wolf_cls or not seer_cls or not person_cls:
+            await CommandAutoroles.finish(
+                "角色加载异常：缺少狼人/预言家/村民角色定义。"
+            )
         room.character_enabled[wolf_cls] = wolves
         room.character_enabled[seer_cls] = 1
+        room.character_enabled[person_cls] = n - wolves - 1
+        # if len(role_pool) < len(self.player_list):
+        #     role_pool.extend(
+        #         [CharacterPerson] * (len(self.player_list) - len(role_pool))
+        #     )
         await CommandAutoroles.finish(
             f"已自动配置角色：狼人 x{wolves}，预言家 x1，其余为村民。"
         )

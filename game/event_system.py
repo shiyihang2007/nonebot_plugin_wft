@@ -21,9 +21,9 @@ class EventSystem:
 
         # === 核心流程事件（对照 docs/wft_event_graph.md） ===
         self.event_game_start = self._new_event("game_start")  # 1
-        self.event_night_start = EventBase()
-        self.event_day_start = EventBase()
-        self.event_vote_start = EventBase()
+        self.event_night_start = self._new_event("night_start")
+        self.event_day_start = self._new_event("day_start")
+        self.event_vote_start = self._new_event("vote_start")
 
         self.event_night_end = self._new_event("night_end")  # 10
         self.event_vote_end = self._new_event("vote_end")  # 24
@@ -31,22 +31,15 @@ class EventSystem:
         self.event_game_end = self._new_event("game_end")  # 100
 
         # === 玩家操作事件 ===
-        self.event_use_skill = EventBase()
+        self.event_use_skill = self._new_event("use_skill")
         self.event_vote = self._new_event("vote")  # 玩家投票输入
         self.event_skip = self._new_event("skip")  # 玩家跳过/结束发言/弃票/放弃技能
 
         # === 通用事件 ===
-        self.event_person_killed = EventBase()
-
-        # 兼容：保留旧字段名的创建方式（逐步迁移到 _new_event）
-        self.events.setdefault("night_start", self.event_night_start)
-        self.events.setdefault("day_start", self.event_day_start)
-        self.events.setdefault("vote_start", self.event_vote_start)
-        self.events.setdefault("use_skill", self.event_use_skill)
-        self.events.setdefault("person_killed", self.event_person_killed)
+        self.event_person_killed = self._new_event("person_killed")
 
     def _new_event(self, name: str) -> EventBase:
-        event = EventBase()
+        event = EventBase(name)
         self.events[name] = event
         return event
 

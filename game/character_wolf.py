@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import logging
 from typing import Any, TYPE_CHECKING
 
 from .event_base import EventBase
@@ -31,20 +32,16 @@ class CharacterWolf(CharacterBase):
         )
         self.event_wolf_locked.add_listener(self.on_wolf_locked)
 
-    def _reset_pack_for_new_night(self) -> None:
-        """重置狼人阵营本夜投票/锁定状态。"""
-        for wolf in self._alive_wolves():
-            wolf.kill_responded = False
-            wolf.night_vote_target_user_id = None
-            wolf.skill_kill_available = True
-            wolf.locked_target_user_id = None
-
     async def on_night_start(
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
+        logging.debug("监听器被触发: 名称 CharacterWolf.on_night_start")
         if not self.alive:
             return
-        self._reset_pack_for_new_night()
+        self.kill_responded = False
+        self.night_vote_target_user_id = None
+        self.skill_kill_available = True
+        self.locked_target_user_id = None
         self.room.events_system.event_night_end.lock()
         await self.send_private(
             "天黑了，你是狼人。\n"

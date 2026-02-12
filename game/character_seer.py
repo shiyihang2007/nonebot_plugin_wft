@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .character_god import CharacterGod
@@ -26,6 +27,7 @@ class CharacterSeer(CharacterGod):
     async def on_night_start(
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
+        logging.debug("监听器被触发: 名称 CharacterSeer.on_night_start")
         if not self.alive:
             return
         self._night_done = False
