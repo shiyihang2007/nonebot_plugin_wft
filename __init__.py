@@ -94,8 +94,7 @@ async def _(event: GroupMessageEvent):
     if group_id in enabled_groups:
         await CommandEnable.finish(f"群聊 {group_id} 已在白名单中")
     enabled_groups.add(group_id)
-    enabled_groups_list = [s for s in enabled_groups if s != group_id]
-    enalbed_groups_file.write_text("\n".join(enabled_groups_list))
+    enalbed_groups_file.write_text("\n".join(enabled_groups))
     await CommandEnable.send(f"群聊 {group_id} 加入了白名单")
 
 
@@ -105,8 +104,7 @@ async def _(event: GroupMessageEvent):
     if group_id not in enabled_groups:
         await CommandDisable.finish(f"群聊 {group_id} 不在白名单中")
     enabled_groups.remove(group_id)
-    enabled_groups_list = [s for s in enabled_groups if s != group_id]
-    enalbed_groups_file.write_text("\n".join(enabled_groups_list))
+    enalbed_groups_file.write_text("\n".join(enabled_groups))
     await CommandDisable.send(f"群聊 {group_id} 退出了白名单")
 
 
