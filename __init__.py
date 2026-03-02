@@ -71,7 +71,7 @@ async def is_admin(bot: Bot, event: MessageEvent, state: T_State) -> bool:
     return False
 
 
-CommandConfig = CommandGroup("wftconfig", rule=is_admin)
+CommandConfig = CommandGroup("wftconfig", rule=is_admin, prefix_aliases=True)
 CommandEnable = CommandConfig.command("enable", aliases={"启用"})
 CommandDisable = CommandConfig.command("disable", aliases={"禁用"})
 CommandBan = CommandConfig.command("ban", aliases={"拉黑"})
@@ -148,7 +148,7 @@ async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
         await CommandUnban.send(f"在群聊 {group_id} 中解禁了 {nickname}")
 
 
-commandPrefix = CommandGroup("wft", rule=is_enabled)
+commandPrefix = CommandGroup("wft", rule=is_enabled, prefix_aliases=True)
 
 CommandInit = commandPrefix.command("init", aliases={"i", "创建", "开房", "初始化"})
 CommandEnd = commandPrefix.command("end", aliases={"结束", "中止"}, rule=to_me())
