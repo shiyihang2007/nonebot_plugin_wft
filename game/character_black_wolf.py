@@ -5,16 +5,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .character_god import CharacterGod
+from .character_wolf import CharacterWolf
 
 
-class CharacterHunter(CharacterGod):
-    """猎人：死亡时可以指定枪杀一名玩家，被毒杀则不能开枪。"""
+class CharacterBlackWolf(CharacterWolf):
+    """黑狼王：既是狼人，也有猎枪"""
 
-    aliases = ["hunter", "猎人", "猎"]
+    aliases = ["blackwolf", "黑狼王", "狼王", "黑狼"]
 
-    role_id = "hunter"
-    name = "猎人"
+    role_id = "blackwolf"
+    name = "黑狼王"
 
     def __init__(self, room, player) -> None:
         super().__init__(room, player)
@@ -39,7 +39,7 @@ class CharacterHunter(CharacterGod):
             self.blocked_event.lock()
 
         tips: list[str] = []
-        tips.append("你是猎人，你可以：")
+        tips.append("你是黑狼王，你可以：")
         tips.append("- `/wft skill shoot <编号>` 枪杀一个人")
         tips.append("- `/wft skip` 放弃使用技能")
         await self.send_private("\n".join(tips))
