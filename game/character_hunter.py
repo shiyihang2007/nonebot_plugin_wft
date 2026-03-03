@@ -9,9 +9,9 @@ from .character_god import CharacterGod
 
 
 class CharacterHunter(CharacterGod):
-    """预言家：猎人：被狼人杀害或投票放逐时可以指定枪杀一名玩家。"""
+    """猎人：死亡时可以指定枪杀一名玩家，被毒杀则不能开枪。"""
 
-    aliases = ["hunter", "猎人"]
+    aliases = ["hunter", "猎人", "猎"]
 
     role_id = "hunter"
     name = "猎人"
@@ -29,6 +29,7 @@ class CharacterHunter(CharacterGod):
         if user_id != self.user_id:
             return
         if args[0] == "被毒死了":
+            await self.send_private("你被毒死了，无法使用猎枪")
             return
 
         self.skill_available = True
