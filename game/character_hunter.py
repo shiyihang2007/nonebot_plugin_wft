@@ -46,6 +46,8 @@ class CharacterHunter(CharacterGod):
     async def on_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if user_id != self.user_id:
             return
+        if not self.skill_available:
+            return
         if not args:
             await self.send_private("用法：`/wft skill shoot <编号>`")
             return
@@ -74,6 +76,8 @@ class CharacterHunter(CharacterGod):
             await self.blocked_event.unlock(self.room, self.user_id, [])
 
     async def on_skip(self, room: Any, user_id: str | None, args: list[str]) -> None:
+        if not self.skill_available:
+            return
         if user_id != self.user_id:
             return
         if not args:
@@ -82,5 +86,6 @@ class CharacterHunter(CharacterGod):
 
         await self.send_private("你已放弃使用技能。")
 
+        self.skill_available = False
         if self.blocked_event:
             await self.blocked_event.unlock(self.room, self.user_id, [])
