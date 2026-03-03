@@ -18,7 +18,7 @@ class CharacterBlackWolf(CharacterWolf):
 
     def __init__(self, room, player) -> None:
         super().__init__(room, player)
-        self.skill_available: bool = False
+        self.skill_shoot_available: bool = False
         self.blocked_event = None
 
         self.room.events_system.event_person_killed.add_listener(self.on_killed)
@@ -32,7 +32,7 @@ class CharacterBlackWolf(CharacterWolf):
             await self.send_private("你被毒死了，无法使用猎枪")
             return
 
-        self.skill_available = True
+        self.skill_shoot_available = True
 
         self.blocked_event = self.room.events_system.get_event(args[1])
         if self.blocked_event:
@@ -47,14 +47,13 @@ class CharacterBlackWolf(CharacterWolf):
     async def on_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if user_id != self.user_id:
             return
-        if not self.skill_available:
+        if not self.skill_shoot_available:
             return
         if not args:
             await self.send_private("用法：`/wft skill shoot <编号>`")
             return
-
         op = args[0].lower()
-        if op not in {"shoot", "kill"}:
+        if op not in {"shoot", "枪", "qiang"}:
             return
         if len(args) < 2 or not args[1].isdigit():
             await self.send_private("用法：`/wft skill shoot <编号>`（编号需要是数字）")
@@ -71,13 +70,13 @@ class CharacterBlackWolf(CharacterWolf):
                 target.user_id,
                 ["被枪杀", self.blocked_event.name if self.blocked_event else ""],
             )
-            self.skill_available = False
+            self.skill_shoot_available = False
 
         if self.blocked_event:
             await self.blocked_event.unlock(self.room, self.user_id, [])
 
     async def on_skip(self, room: Any, user_id: str | None, args: list[str]) -> None:
-        if not self.skill_available:
+        if not self.skill_shoot_available:
             return
         if user_id != self.user_id:
             return
@@ -87,6 +86,6 @@ class CharacterBlackWolf(CharacterWolf):
 
         await self.send_private("你已放弃使用技能。")
 
-        self.skill_available = False
+        self.skill_shoot_available = False
         if self.blocked_event:
             await self.blocked_event.unlock(self.room, self.user_id, [])

@@ -56,23 +56,21 @@ class CharacterWolf(CharacterBase):
     async def on_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if not self.alive or user_id != self.user_id:
             return
-        if self.room.state != "night":
-            await self.send_private("现在不是夜晚阶段，无法使用狼人的击杀。")
-            return
         if not self.skill_kill_available:
-            await self.send_private("狼人行动已锁定。")
             return
         if not args:
             await self.send_private("用法：`/wft skill kill <编号>`")
             return
-
         op = args[0].lower()
         if op not in {"kill", "knife", "sha", "杀", "刀"}:
+            return
+
+        if self.room.state != "night":
+            await self.send_private("现在不是夜晚阶段，无法使用狼人的击杀。")
             return
         if len(args) < 2 or not args[1].isdigit():
             await self.send_private("用法：`/wft skill kill <编号>`（编号需要是数字）")
             return
-
         seat = int(args[1])
         target = self.room.get_player_by_seat(seat)
         if not target:
