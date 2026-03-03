@@ -32,6 +32,7 @@ from .player import Player
 from .character_base import CharacterBase
 from .character_person import CharacterPerson
 from .event_system import EventSystem
+from .room_settings import RoomSettings
 
 
 _logger = logging.getLogger(__name__)
@@ -134,6 +135,7 @@ class Room:
     def __init__(
         self, group_id: str, func_send_group_message, func_send_private_message
     ) -> None:
+
         # NoneBot/OneBot APIs expect numeric ids, but we store them as str internally.
         self.group_id: str = str(group_id)
         self.func_send_group_message = func_send_group_message
@@ -142,7 +144,7 @@ class Room:
         self.id_2_player: dict[str, Player] = {}
         self.events_system: EventSystem = EventSystem()
         self.character_enabled: dict[type[CharacterBase], int] = {}
-        self.settings: dict[str, int | str | bool] = {}
+        self.settings: RoomSettings = RoomSettings()
 
         # 对局阶段（用于校验玩家输入；推进由事件系统的 lock/unlock 触发）
         # - lobby：未开始，可加入/配置
@@ -174,7 +176,7 @@ class Room:
     async def add_player(self, user_id: str) -> None:
         """将玩家加入房间（座位顺序按加入顺序）。"""
         if user_id in self.id_2_player:
-            if self.settings["debug"]:
+            if self.settings.debug:
                 await self.broadcast(f"调试模式：玩家 {user_id} 被重复加入房间")
                 self.id_2_player[user_id + random.randbytes(4).decode()] = Player(
                     user_id, len(self.player_list)
@@ -254,10 +256,6 @@ class Room:
             lines.append("没有移除任何角色")
         await self.broadcast("\n".join(lines))
 
-    def change_setting(self, key: str, value: int | str | bool):
-        """修改房间设置（预留扩展）。"""
-        self.settings[key] = value
-
     def _register_core_event_listeners(self) -> None:
         """注册与角色无关的核心流程监听器。
 
@@ -289,7 +287,7 @@ class Room:
             await self.broadcast("游戏已开始，无法重复开始。")
             return
         if len(self.player_list) < 4:
-            if self.settings["debug"]:
+            if self.settings.debug:
                 await self.broadcast("警告：调试模式已启用，在人数不足情况下强行开启")
             else:
                 await self.broadcast(
