@@ -25,7 +25,7 @@ class CharacterWolf(CharacterBase):
         super().__init__(room, player)
         self.kill_responded: bool = False
         self.night_vote_target_user_id: str | None = None
-        self.skill_kill_available: bool = True
+        self.skill_kill_available: bool = False
         self.locked_target_user_id: str | None = None
 
         self.room.events_system.event_night_start.add_listener(self.on_night_start)
@@ -54,12 +54,14 @@ class CharacterWolf(CharacterBase):
         )
 
     async def on_skill(self, room: Any, user_id: str | None, args: list[str]) -> None:
+        logging.warning(
+            "on_skill (wolf) triggered uid %s, args [%s]", user_id, ",".join(args)
+        )
         if not self.alive or user_id != self.user_id:
             return
         if not self.skill_kill_available:
             return
         if not args:
-            await self.send_private("用法：`/wft skill kill <编号>`")
             return
         op = args[0].lower()
         if op not in {"kill", "knife", "sha", "杀", "刀"}:

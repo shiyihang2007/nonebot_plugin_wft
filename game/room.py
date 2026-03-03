@@ -177,27 +177,44 @@ class Room:
         """将玩家加入房间（座位顺序按加入顺序）。"""
         if user_id in self.id_2_player:
             if self.settings.debug:
-                await self.broadcast(f"调试模式：玩家 {user_id} 被重复加入房间")
-                self.id_2_player[user_id + random.randbytes(4).decode()] = Player(
-                    user_id, len(self.player_list)
+                await self.broadcast(
+                    f"调试模式：玩家 [CQ:at,qq={user_id}] 被重复加入房间"
                 )
-                self.player_list.append(self.id_2_player[user_id])
+                uid = user_id + "_" + hex(random.randint(0x1000, 0xFFFF))[2:]
+                self.id_2_player[uid] = Player(user_id, len(self.player_list))
+                self.player_list.append(self.id_2_player[uid])
                 return
-            await self.broadcast(f"玩家 {user_id} 已在房间内")
+            await self.broadcast(f"玩家 [CQ:at,qq={user_id}] 已在房间内")
             return
         self.id_2_player[user_id] = Player(user_id, len(self.player_list))
         self.player_list.append(self.id_2_player[user_id])
+        await self.broadcast(f"[CQ:at,qq={user_id}] 已加入游戏")
 
     async def remove_player(self, user_id: str) -> None:
         """移除玩家，并保持座位顺序连续。"""
-        try:
-            self.player_list.pop(self.id_2_player[user_id].order)
-        except KeyError:
-            await self.broadcast(f"玩家 {user_id} 不存在于房间内")
+        for key in self.id_2_player:
+            if key == user_id or (
+                key.find(user_id) == 0
+                and len(key) > len(user_id)
+                and key[len(user_id)] == "_"
+            ):
+                uid = key
+                break
+        else:
+            await self.broadcast(f"玩家 [CQ:at,qq={user_id}] 不存在于房间内")
             return
-        for i in self.player_list[self.id_2_player[user_id].order :]:
+        logging.info(
+            "uid %s exited, order %d, len %d, %s",
+            uid,
+            self.id_2_player[uid].order,
+            len(self.player_list),
+            str([x.order for x in self.player_list]),
+        )
+        self.player_list.pop(self.id_2_player[uid].order)
+        for i in self.player_list[self.id_2_player[uid].order :]:
             i.order -= 1
-        del self.id_2_player[user_id]
+        del self.id_2_player[uid]
+        await self.broadcast(f"玩家 [CQ:at,qq={user_id}] 已退出房间")
 
     async def add_character(self, character_list: list[str]) -> None:
         """按别名启用角色（例如：`狼`、`seer`）。"""
@@ -327,7 +344,8 @@ class Room:
             player.role = role_cls(self, player)
 
         seats_text = "\n".join(
-            f"  {p.seat}号 [CQ:at,qq={int(p.user_id)}]" for p in self.player_list
+            f"  {p.seat}号 [CQ:at,qq={int(p.user_id)}] ({p.user_id})"
+            for p in self.player_list
         )
         await self.broadcast(
             f"游戏开始！\n座位顺序: \n{seats_text}\n请在私聊中查收身份牌"

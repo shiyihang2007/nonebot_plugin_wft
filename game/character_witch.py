@@ -82,12 +82,8 @@ class CharacterWitch(CharacterGod):
         if self.room.state != "night":
             return
         if not self._skill_available:
-            await self.send_private("你现在无法行动")
             return
         if not args:
-            await self.send_private(
-                "用法：`/wft skill save` 或 `/wft skill poison <编号>`"
-            )
             return
 
         op = args[0].lower()
