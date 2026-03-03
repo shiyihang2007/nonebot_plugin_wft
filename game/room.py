@@ -176,7 +176,9 @@ class Room:
         if user_id in self.id_2_player:
             if self.settings["debug"]:
                 await self.broadcast(f"调试模式：玩家 {user_id} 被重复加入房间")
-                self.id_2_player[user_id + random.randbytes(4).decode()] = Player(user_id, len(self.player_list))
+                self.id_2_player[user_id + random.randbytes(4).decode()] = Player(
+                    user_id, len(self.player_list)
+                )
                 self.player_list.append(self.id_2_player[user_id])
                 return
             await self.broadcast(f"玩家 {user_id} 已在房间内")

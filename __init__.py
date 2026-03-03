@@ -327,8 +327,6 @@ async def _(event: MessageEvent):
         if room.state != "lobby":
             await CommandJoin.finish("游戏已开始，无法中途加入。")
         user_id: str = event.get_user_id()
-        if user_id in room.id_2_player:
-            await CommandJoin.finish("不能重复加入游戏")
         await room.add_player(user_id)
         await CommandJoin.finish(Message(f"[CQ:at,qq={str(int(user_id))}] 已加入游戏"))
 
