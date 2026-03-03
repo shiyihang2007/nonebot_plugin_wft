@@ -18,8 +18,8 @@ class CharacterHunter(CharacterGod):
 
     def __init__(self, room, player) -> None:
         super().__init__(room, player)
-        self.have_skill : bool = False
-        self.skill_time : str | None = None
+        self.skill_available: bool = False
+        self.blocked_event = None
 
         self.room.events_system.event_person_killed.add_listener(self.on_killed)
         self.room.events_system.event_skill.add_listener(self.on_skill)
@@ -31,16 +31,11 @@ class CharacterHunter(CharacterGod):
         if args[0] == "被毒死了":
             return
 
-        self.have_skill = True
-        self.room.events_system.event_skill.add_listener(self.on_skill)
-        self.room.events_system.event_skip.add_listener(self.on_skip)
+        self.skill_available = True
 
-        if args[1] == "day_start":
-            self.skill_time = "vote_start"
-            self.room.events_system.event_vote_start.lock()
-        else:
-            self.skill_time = "day_end"
-            self.room.events_system.event_day_end.lock()
+        self.blocked_event = self.room.events_system.get_event(args[1])
+        if self.blocked_event:
+            self.blocked_event.lock()
 
         tips: list[str] = []
         tips.append("你是猎人，你可以：")
@@ -68,17 +63,15 @@ class CharacterHunter(CharacterGod):
         elif not target.alive:
             await self.send_private("目标已死亡。")
         else:
-            self.room.pending_death_records[target.user_id] = "被猎人枪杀"
-            self.have_skill = False
+            await self.room.events_system.event_person_killed.active(
+                self,
+                target.user_id,
+                ["被猎人枪杀", self.blocked_event.name if self.blocked_event else ""],
+            )
+            self.skill_available = False
 
-        if self.skill_time == "vote_start":
-            await self.room.events_system.event_vote_start.unlock(
-                self.room, self.user_id, []
-            )
-        else:
-            await self.room.events_system.event_day_end.unlock(
-                self.room, self.user_id, []
-            )
+        if self.blocked_event:
+            await self.blocked_event.unlock(self.room, self.user_id, [])
 
     async def on_skip(self, room: Any, user_id: str | None, args: list[str]) -> None:
         if user_id != self.user_id:
@@ -89,11 +82,5 @@ class CharacterHunter(CharacterGod):
 
         await self.send_private("你已放弃使用技能。")
 
-        if self.skill_time == "vote_start":
-            await self.room.events_system.event_vote_start.unlock(
-                self.room, self.user_id, []
-            )
-        else:
-            await self.room.events_system.event_day_end.unlock(
-                self.room, self.user_id, []
-            )
+        if self.blocked_event:
+            await self.blocked_event.unlock(self.room, self.user_id, [])
