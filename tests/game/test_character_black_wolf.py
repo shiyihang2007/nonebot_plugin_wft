@@ -76,11 +76,6 @@ async def test_on_skill__shoot_valid_target_and_unlock(room_factory, players_fac
     black_wolf.blocked_event.unlock.assert_awaited_once_with(room, "1001", [])
 
 
-@pytest.mark.spec_expected
-@pytest.mark.xfail(
-    reason="WFT-TEST-003: black_wolf.on_skip 应支持空参数直接放弃",
-    strict=False,
-)
 @pytest.mark.asyncio
 async def test_on_skip__spec_empty_args_should_skip(room_factory, players_factory) -> None:
     room = room_factory()
@@ -185,22 +180,3 @@ async def test_on_skip__not_available_or_wrong_user_ignored(room_factory, player
     black_wolf.skill_shoot_available = True
     await black_wolf.on_skip(room, "2001", ["x"])
     assert black_wolf.skill_shoot_available is True
-
-
-@pytest.mark.known_issue
-@pytest.mark.asyncio
-async def test_on_skip__current_behavior_requires_non_empty_args(
-    room_factory, players_factory, fake_io
-) -> None:
-    room = room_factory()
-    players = players_factory(room, 1, 1001)
-    black_wolf = CharacterBlackWolf(room, players[0])
-    players[0].role = black_wolf
-    black_wolf.skill_shoot_available = True
-    black_wolf.blocked_event = AsyncMock()
-
-    await black_wolf.on_skip(room, "1001", [])
-
-    assert black_wolf.skill_shoot_available is True
-    assert "用法" in fake_io["private_messages"][-1][1]
-    black_wolf.blocked_event.unlock.assert_not_awaited()

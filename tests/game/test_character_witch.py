@@ -135,11 +135,6 @@ async def test_on_skill__save_successfully_removes_pending_death(
     assert "救下了" in fake_io["private_messages"][-1][1]
 
 
-@pytest.mark.spec_expected
-@pytest.mark.xfail(
-    reason="WFT-TEST-004: 无可救目标时，save 不应消耗解药",
-    strict=False,
-)
 @pytest.mark.asyncio
 async def test_on_skill__spec_save_without_target_should_not_consume_antidote(
     room_factory, players_factory

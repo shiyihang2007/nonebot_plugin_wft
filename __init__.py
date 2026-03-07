@@ -168,7 +168,7 @@ CommandDebug = commandPrefix.command("debug", rule=to_me())
 
 CommandJoin = commandPrefix.command("join", aliases={"j", "加入", "加", "进入", "进"})
 CommandExit = commandPrefix.command("exit", aliases={"e", "退出", "退", "离开", "离"})
-CommandShowroles = commandPrefix.command("showplayers", aliases={"显示玩家", "玩家"})
+CommandShowplayers = commandPrefix.command("showplayers", aliases={"显示玩家", "玩家"})
 
 CommandAddrole = commandPrefix.command("addrole", aliases={"a", "添角色", "添"})
 CommandRmrole = commandPrefix.command("rmrole", aliases={"r", "删角色", "删"})
@@ -300,15 +300,15 @@ async def _(event: MessageEvent):
 @CommandDebug.handle()
 async def _(event: MessageEvent):
     if not isinstance(event, GroupMessageEvent):
-        await CommandEnd.finish("请在群聊中使用该指令。")
+        await CommandDebug.finish("请在群聊中使用该指令。")
     group_id: str = str(event.group_id)
     async with _room_manager.lock(group_id):
         if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
-            await CommandEnd.finish("没有正在进行的游戏. ")
+            await CommandDebug.finish("没有正在进行的游戏. ")
         _room_manager.rooms[group_id].settings.debug = not _room_manager.rooms[
             group_id
         ].settings.debug
-        await CommandEnd.finish(
+        await CommandDebug.finish(
             f"调试模式已{'开启' if _room_manager.rooms[group_id].settings.debug else '关闭'}"
         )
 
@@ -371,6 +371,21 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
             await CommandRmrole.finish("游戏已开始，无法修改角色配置。")
         role_list: list[str] = args.extract_plain_text().split(" ")
         await room.remove_character(role_list)
+
+
+@CommandShowplayers.handle()
+async def _(event: MessageEvent):
+    if not isinstance(event, GroupMessageEvent):
+        await CommandShowplayers.finish("请在群聊中使用该指令。")
+    group_id: str = str(event.group_id)
+    async with _room_manager.lock(group_id):
+        if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
+            await CommandShowplayers.finish("没有正在进行的游戏. ")
+        room = _room_manager.rooms[group_id]
+        lines = room.players_overview_lines()
+        if not lines:
+            await CommandShowplayers.finish("当前没有玩家加入。")
+        await CommandShowplayers.finish("\n".join(lines))
 
 
 @CommandShowroles.handle()

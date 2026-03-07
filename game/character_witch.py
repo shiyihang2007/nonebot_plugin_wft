@@ -89,7 +89,6 @@ class CharacterWitch(CharacterGod):
         op = args[0].lower()
         if op in {"save", "heal", "antidote", "jiu", "救", "解药", "救人"}:
             if self.has_antidote:
-                self.has_antidote = False
                 if self._wolf_kill_target_user_id in self.room.pending_death_records:
                     del self.room.pending_death_records[self._wolf_kill_target_user_id]
                     victim = self.room.id_2_player.get(self._wolf_kill_target_user_id)

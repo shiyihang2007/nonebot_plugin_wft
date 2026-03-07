@@ -81,9 +81,6 @@ class CharacterHunter(CharacterGod):
             return
         if user_id != self.user_id:
             return
-        if not args:
-            await self.send_private("用法：`/wft skill shoot <编号>`")
-            return
 
         await self.send_private("你已放弃使用技能。")
 

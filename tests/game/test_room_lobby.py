@@ -168,3 +168,26 @@ def test_alive_related_queries__return_expected_sets(room_factory, players_facto
     assert [p.user_id for p in alive] == ["1001", "1002"]
     assert room.alive_user_ids() == {"1001", "1002"}
     assert room.alive_role_user_ids("wolf") == {"1002"}
+
+
+@pytest.mark.unit
+def test_players_overview_lines__include_seat_and_alive_status(
+    room_factory, players_factory
+) -> None:
+    room = room_factory()
+    players = players_factory(room, 2, 1001)
+    players[1].alive = False
+
+    lines = room.players_overview_lines()
+
+    assert lines == [
+        "1号 [CQ:at,qq=1001] - 存活",
+        "2号 [CQ:at,qq=1002] - 死亡",
+    ]
+
+
+@pytest.mark.unit
+def test_players_overview_lines__empty_room_returns_empty_list(room_factory) -> None:
+    room = room_factory()
+
+    assert room.players_overview_lines() == []
