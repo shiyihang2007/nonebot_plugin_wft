@@ -32,6 +32,7 @@ from .player import Player
 from .character_base import CharacterBase
 from .character_person import CharacterPerson
 from .event_system import EventSystem
+from .room_settings import RoomSettings
 
 
 _logger = logging.getLogger(__name__)
@@ -134,6 +135,7 @@ class Room:
     def __init__(
         self, group_id: str, func_send_group_message, func_send_private_message
     ) -> None:
+
         # NoneBot/OneBot APIs expect numeric ids, but we store them as str internally.
         self.group_id: str = str(group_id)
         self.func_send_group_message = func_send_group_message
@@ -142,7 +144,7 @@ class Room:
         self.id_2_player: dict[str, Player] = {}
         self.events_system: EventSystem = EventSystem()
         self.character_enabled: dict[type[CharacterBase], int] = {}
-        self.settings: dict[str, int | str | bool] = {}
+        self.settings: RoomSettings = RoomSettings()
 
         # 对局阶段（用于校验玩家输入；推进由事件系统的 lock/unlock 触发）
         # - lobby：未开始，可加入/配置
@@ -174,21 +176,45 @@ class Room:
     async def add_player(self, user_id: str) -> None:
         """将玩家加入房间（座位顺序按加入顺序）。"""
         if user_id in self.id_2_player:
-            await self.broadcast(f"玩家 {user_id} 已在房间内")
+            if self.settings.debug:
+                await self.broadcast(
+                    f"调试模式：玩家 [CQ:at,qq={user_id}] 被重复加入房间"
+                )
+                uid = user_id + "_" + hex(random.randint(0x1000, 0xFFFF))[2:]
+                self.id_2_player[uid] = Player(user_id, len(self.player_list))
+                self.player_list.append(self.id_2_player[uid])
+                return
+            await self.broadcast(f"玩家 [CQ:at,qq={user_id}] 已在房间内")
             return
         self.id_2_player[user_id] = Player(user_id, len(self.player_list))
         self.player_list.append(self.id_2_player[user_id])
+        await self.broadcast(f"[CQ:at,qq={user_id}] 已加入游戏")
 
     async def remove_player(self, user_id: str) -> None:
         """移除玩家，并保持座位顺序连续。"""
-        try:
-            self.player_list.pop(self.id_2_player[user_id].order)
-        except KeyError:
-            await self.broadcast(f"玩家 {user_id} 不存在于房间内")
+        for key in self.id_2_player:
+            if key == user_id or (
+                key.find(user_id) == 0
+                and len(key) > len(user_id)
+                and key[len(user_id)] == "_"
+            ):
+                uid = key
+                break
+        else:
+            await self.broadcast(f"玩家 [CQ:at,qq={user_id}] 不存在于房间内")
             return
-        for i in self.player_list[self.id_2_player[user_id].order :]:
+        logging.info(
+            "uid %s exited, order %d, len %d, %s",
+            uid,
+            self.id_2_player[uid].order,
+            len(self.player_list),
+            str([x.order for x in self.player_list]),
+        )
+        self.player_list.pop(self.id_2_player[uid].order)
+        for i in self.player_list[self.id_2_player[uid].order :]:
             i.order -= 1
-        del self.id_2_player[user_id]
+        del self.id_2_player[uid]
+        await self.broadcast(f"玩家 [CQ:at,qq={user_id}] 已退出房间")
 
     async def add_character(self, character_list: list[str]) -> None:
         """按别名启用角色（例如：`狼`、`seer`）。"""
@@ -247,10 +273,6 @@ class Room:
             lines.append("没有移除任何角色")
         await self.broadcast("\n".join(lines))
 
-    def change_setting(self, key: str, value: int | str | bool):
-        """修改房间设置（预留扩展）。"""
-        self.settings[key] = value
-
     def _register_core_event_listeners(self) -> None:
         """注册与角色无关的核心流程监听器。
 
@@ -282,7 +304,7 @@ class Room:
             await self.broadcast("游戏已开始，无法重复开始。")
             return
         if len(self.player_list) < 4:
-            if self.settings["debug"]:
+            if self.settings.debug:
                 await self.broadcast("警告：调试模式已启用，在人数不足情况下强行开启")
             else:
                 await self.broadcast(
@@ -322,7 +344,8 @@ class Room:
             player.role = role_cls(self, player)
 
         seats_text = "\n".join(
-            f"  {p.seat}号 [CQ:at,qq={int(p.user_id)}]" for p in self.player_list
+            f"  {p.seat}号 [CQ:at,qq={int(p.user_id)}] ({p.user_id})"
+            for p in self.player_list
         )
         await self.broadcast(
             f"游戏开始！\n座位顺序: \n{seats_text}\n请在私聊中查收身份牌"

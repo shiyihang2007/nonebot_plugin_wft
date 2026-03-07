@@ -24,7 +24,7 @@ from nonebot.params import CommandArg
 from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
 
-from .game.room import Room, get_character_class_by_role_id
+from .game.room import Room, RoomSettings, get_character_class_by_role_id
 from .room_manager import RoomManager
 
 from nonebot import require
@@ -269,7 +269,8 @@ async def _(bot: Bot, event: MessageEvent):
             for p in old_room.player_list:
                 await new_room.add_player(p.user_id)
             new_room.character_enabled = dict(old_room.character_enabled)
-            new_room.settings = dict(old_room.settings)
+            new_room.settings = old_room.settings
+            del old_room
 
             _room_manager.rooms[group_id] = new_room
             await CommandInit.finish(
@@ -304,14 +305,11 @@ async def _(event: MessageEvent):
     async with _room_manager.lock(group_id):
         if group_id not in _room_manager.rooms or not _room_manager.rooms[group_id]:
             await CommandEnd.finish("没有正在进行的游戏. ")
-        _room_manager.rooms[group_id].change_setting(
-            "debug",
-            not _room_manager.rooms[group_id].settings["debug"]
-            if "debug" in _room_manager.rooms[group_id].settings
-            else True,
-        )
+        _room_manager.rooms[group_id].settings.debug = not _room_manager.rooms[
+            group_id
+        ].settings.debug
         await CommandEnd.finish(
-            f"调试模式已{'开启' if _room_manager.rooms[group_id].settings['debug'] else '关闭'}"
+            f"调试模式已{'开启' if _room_manager.rooms[group_id].settings.debug else '关闭'}"
         )
 
 
@@ -327,10 +325,7 @@ async def _(event: MessageEvent):
         if room.state != "lobby":
             await CommandJoin.finish("游戏已开始，无法中途加入。")
         user_id: str = event.get_user_id()
-        if user_id in room.id_2_player:
-            await CommandJoin.finish("不能重复加入游戏")
         await room.add_player(user_id)
-        await CommandJoin.finish(Message(f"[CQ:at,qq={str(int(user_id))}] 已加入游戏"))
 
 
 @CommandExit.handle()
@@ -346,7 +341,6 @@ async def _(event: MessageEvent):
             await CommandExit.finish("游戏已开始，无法中途退出。")
         user_id: str = event.get_user_id()
         await room.remove_player(user_id)
-        await CommandExit.finish(Message(f"[CQ:at,qq={str(int(user_id))}] 已离开游戏"))
 
 
 @CommandAddrole.handle()
@@ -493,6 +487,10 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
         if room.state == "ended":
             await CommandSkill.finish("该群的游戏已结束，请先 `wft.init`。")
 
+        if room.settings.debug:
+            await room.events_system.event_skill.active(room, user_id, arg_list)
+            return
+
         if not isinstance(event, GroupMessageEvent) and user_id not in room.id_2_player:
             await CommandSkill.finish("你不在该群的游戏中。")
 
@@ -558,10 +556,13 @@ async def _(event: MessageEvent, args: Message = CommandArg()):
             await CommandSkip.finish(f"群聊 {group_id} 没有正在进行的游戏。")
         if room.state == "ended":
             await CommandSkip.finish("该群的游戏已结束。")
+
+        if room.settings.debug:
+            await room.events_system.event_skip.active(room, user_id, [])
+            return
+
         if not isinstance(event, GroupMessageEvent):
             if user_id not in room.id_2_player:
                 await CommandSkip.finish("你不在该群的游戏中。")
-            if room.state != "night":
-                await CommandSkip.finish("当前阶段请在群聊中使用该指令。")
 
         await room.events_system.event_skip.active(room, user_id, [])

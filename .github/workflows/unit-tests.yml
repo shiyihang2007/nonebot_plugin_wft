@@ -1,0 +1,101 @@
+name: WFT Unit Tests
+
+on:
+  push:
+    paths:
+      - "game/**"
+      - "tests/game/**"
+      - "pytest.ini"
+      - ".coveragerc"
+      - "requirements-test.txt"
+      - ".github/workflows/unit-tests.yml"
+  pull_request:
+    paths:
+      - "game/**"
+      - "tests/game/**"
+      - "pytest.ini"
+      - ".coveragerc"
+      - "requirements-test.txt"
+      - ".github/workflows/unit-tests.yml"
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-test.txt
+
+      - name: Collect tests
+        run: python -m pytest tests/game --collect-only -q
+
+      - name: Run tests with coverage
+        run: |
+          python -m pytest tests/game \
+            --cov=game \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-report=json:coverage.json
+
+      - name: Check coverage thresholds
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("coverage.json").read_text(encoding="utf-8"))
+          totals = data["totals"]
+
+          line_pct = totals["percent_covered"]
+          branch_total = totals.get("num_branches", 0)
+          if branch_total:
+              branch_pct = (totals.get("covered_branches", 0) / branch_total) * 100
+          else:
+              branch_pct = 100.0
+
+          if line_pct < 90:
+              raise SystemExit(f"Global line coverage too low: {line_pct:.2f}% < 90%")
+          if branch_pct < 85:
+              raise SystemExit(f"Global branch coverage too low: {branch_pct:.2f}% < 85%")
+
+          key_files = []
+          for file_path in data["files"]:
+              posix = file_path.replace("\\", "/")
+              if posix.endswith("game/room.py") or posix.endswith("game/event_base.py"):
+                  key_files.append(file_path)
+              if posix.startswith("game/character_") and posix.endswith(".py"):
+                  key_files.append(file_path)
+
+          if not key_files:
+              raise SystemExit("No key game files found in coverage report.")
+
+          for file_path in sorted(set(key_files)):
+              summary = data["files"][file_path]["summary"]
+              file_line = summary["percent_covered"]
+              branches = summary.get("num_branches", 0)
+              if branches:
+                  file_branch = (summary.get("covered_branches", 0) / branches) * 100
+              else:
+                  file_branch = 100.0
+              if file_line < 95:
+                  raise SystemExit(
+                      f"{file_path} line coverage too low: {file_line:.2f}% < 95%"
+                  )
+              if file_branch < 90:
+                  raise SystemExit(
+                      f"{file_path} branch coverage too low: {file_branch:.2f}% < 90%"
+                  )
+
+          print(
+              f"Coverage check passed. Global line={line_pct:.2f}%, branch={branch_pct:.2f}%"
+          )
+          PY

@@ -1,0 +1,10 @@
+[run]
+branch = True
+source =
+    game
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 2
+fail_under = 90
