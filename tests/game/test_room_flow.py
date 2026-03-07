@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -208,11 +208,6 @@ async def test_on_night_end__no_victim_unlock_day_start(room_factory, fake_io) -
     room.events_system.event_day_start.unlock.assert_awaited_once_with(room, None, [])
 
 
-@pytest.mark.spec_expected
-@pytest.mark.xfail(
-    reason="WFT-TEST-001: pending_death_records 应按 dict.items() 遍历",
-    strict=False,
-)
 @pytest.mark.asyncio
 async def test_on_night_end__spec_should_dispatch_person_killed_for_each_pending_record(
     room_factory,
@@ -230,29 +225,39 @@ async def test_on_night_end__spec_should_dispatch_person_killed_for_each_pending
     room.events_system.event_person_killed.active.assert_awaited_once_with(
         room, "1001", ["被狼刀了", "day_start"]
     )
+    room.events_system.event_day_start.unlock.assert_awaited_once_with(room, None, [])
 
 
-@pytest.mark.known_issue
 @pytest.mark.asyncio
-async def test_on_night_end__current_behavior_raises_when_pending_records_is_dict(
+async def test_on_night_end__dispatches_all_pending_records(room_factory) -> None:
+    room = room_factory()
+    room.state = "night"
+    room.pending_death_records = {"1001": "被狼刀了", "1002": "被毒死了"}
+    room.id_2_player["1001"] = MagicMock(seat=1)
+    room.id_2_player["1002"] = MagicMock(seat=2)
+    room.events_system.event_person_killed.active = AsyncMock()
+    room.events_system.event_day_start.lock = MagicMock()
+    room.events_system.event_day_start.unlock = AsyncMock()
+
+    await room._on_night_end(room, None, [])
+
+    assert room.events_system.event_person_killed.active.await_args_list == [
+        call(room, "1001", ["被狼刀了", "day_start"]),
+        call(room, "1002", ["被毒死了", "day_start"]),
+    ]
+    room.events_system.event_day_start.unlock.assert_awaited_once_with(room, None, [])
+    assert room.pending_death_records == {}
+
+
+@pytest.mark.asyncio
+async def test_on_night_end__dict_key_is_user_id_not_iterated_as_chars(
     room_factory,
+    fake_io,
 ) -> None:
     room = room_factory()
     room.state = "night"
-    room.pending_death_records = {"1001": "被狼刀了"}
-    room.id_2_player["1001"] = MagicMock(seat=1)
-
-    with pytest.raises(ValueError):
-        await room._on_night_end(room, None, [])
-
-
-@pytest.mark.known_issue
-@pytest.mark.asyncio
-async def test_on_night_end__current_weird_iteration_with_two_char_key(room_factory, fake_io) -> None:
-    room = room_factory()
-    room.state = "night"
     room.pending_death_records = {"ab": "被狼刀了"}
-    room.id_2_player["a"] = MagicMock(seat=1)
+    room.id_2_player["ab"] = MagicMock(seat=1)
     room.events_system.event_person_killed.active = AsyncMock()
     room.events_system.event_day_start.lock = MagicMock()
     room.events_system.event_day_start.unlock = AsyncMock()
@@ -261,9 +266,9 @@ async def test_on_night_end__current_weird_iteration_with_two_char_key(room_fact
 
     assert "昨晚 1号 死亡" in fake_io["group_messages"][-1][1]
     room.events_system.event_person_killed.active.assert_awaited_once_with(
-        room, "a", ["b", "day_start"]
+        room, "ab", ["被狼刀了", "day_start"]
     )
-    room.events_system.event_day_start.unlock.assert_not_awaited()
+    room.events_system.event_day_start.unlock.assert_awaited_once_with(room, None, [])
 
 
 @pytest.mark.room_flow

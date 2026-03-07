@@ -384,6 +384,14 @@ class Room:
             if p.alive and p.role and p.role.role_id == role_id
         }
 
+    def players_overview_lines(self) -> list[str]:
+        """返回玩家座位/状态概览（不包含身份）。"""
+        lines: list[str] = []
+        for player in self.player_list:
+            status = "存活" if player.alive else "死亡"
+            lines.append(f"{player.seat}号 [CQ:at,qq={player.user_id}] - {status}")
+        return lines
+
     # === 事件驱动：核心流程监听器实现 ===
 
     async def _on_game_start(
@@ -431,19 +439,18 @@ class Room:
         # 在死亡事件发送前对 day_start 事件加锁，
         self.events_system.event_day_start.lock()
 
-        victims = [x for x, _ in self.pending_death_records]
+        victims = list(self.pending_death_records.keys())
         if not victims:
             await self.broadcast("天亮了：昨晚是平安夜。")
         else:
             seats = "、".join(f"{self.id_2_player[p].seat}号" for p in victims)
             await self.broadcast(f"天亮了：昨晚 {seats} 死亡。")
         if self.pending_death_records:
-            for victim_user_id, reason in self.pending_death_records:
+            for victim_user_id, reason in self.pending_death_records.items():
                 await self.events_system.event_person_killed.active(
                     self, victim_user_id, [reason, "day_start"]
                 )
             self.pending_death_records = {}
-            return
         # 死亡事件发送后尝试解锁以确保在无阻塞时事件流程正常推进
         await self.events_system.event_day_start.unlock(self, None, [])
 

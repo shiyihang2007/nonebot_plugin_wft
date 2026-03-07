@@ -133,11 +133,6 @@ async def test_on_skill__wrong_user_or_unavailable_or_invalid_op_ignored(
     assert hunter.skill_available is True
 
 
-@pytest.mark.spec_expected
-@pytest.mark.xfail(
-    reason="WFT-TEST-002: hunter.on_skip 应支持空参数直接放弃",
-    strict=False,
-)
 @pytest.mark.asyncio
 async def test_on_skip__spec_empty_args_should_skip(room_factory, players_factory) -> None:
     room = room_factory()
@@ -185,20 +180,3 @@ async def test_on_skip__not_available_or_wrong_user_ignored(room_factory, player
     hunter.skill_available = True
     await hunter.on_skip(room, "2001", ["x"])
     assert hunter.skill_available is True
-
-
-@pytest.mark.known_issue
-@pytest.mark.asyncio
-async def test_on_skip__current_behavior_requires_non_empty_args(room_factory, players_factory, fake_io) -> None:
-    room = room_factory()
-    players = players_factory(room, 1, 1001)
-    hunter = CharacterHunter(room, players[0])
-    players[0].role = hunter
-    hunter.skill_available = True
-    hunter.blocked_event = AsyncMock()
-
-    await hunter.on_skip(room, "1001", [])
-
-    assert hunter.skill_available is True
-    assert "用法" in fake_io["private_messages"][-1][1]
-    hunter.blocked_event.unlock.assert_not_awaited()

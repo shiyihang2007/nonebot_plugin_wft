@@ -27,6 +27,7 @@ class CharacterWolf(CharacterBase):
         self.night_vote_target_user_id: str | None = None
         self.skill_kill_available: bool = False
         self.locked_target_user_id: str | None = None
+        self._night_end_locked: bool = False
 
         self.room.events_system.event_night_start.add_listener(self.on_night_start)
         self.room.events_system.event_skill.add_listener(self.on_skill)
@@ -40,6 +41,7 @@ class CharacterWolf(CharacterBase):
         self, room: Any, user_id: str | None, args: list[str]
     ) -> None:
         logging.debug("监听器被触发: 名称 CharacterWolf.on_night_start")
+        self._night_end_locked = False
         if not self.alive:
             return
         self.kill_responded = False
@@ -47,6 +49,7 @@ class CharacterWolf(CharacterBase):
         self.skill_kill_available = True
         self.locked_target_user_id = None
         self.room.events_system.event_night_end.lock()
+        self._night_end_locked = True
         await self.send_private(
             "天黑了，你是狼人。\n"
             "请使用 `/wft skill kill <编号>` 选择击杀目标（例如：`/wft skill kill 3`），"
@@ -108,13 +111,18 @@ class CharacterWolf(CharacterBase):
     ) -> None:
         """狼刀锁定"""
         self.skill_kill_available = False
+        if self._night_end_locked:
+            self._night_end_locked = False
+            await self.room.events_system.event_night_end.unlock(
+                self.room, self.user_id, []
+            )
 
     def _alive_wolves(self) -> list[CharacterWolf]:
         wolves: list[CharacterWolf] = []
         for p in self.room.player_list:
             if not p.alive or not p.role:
                 continue
-            if getattr(p.role, "role_id", None) != "wolf":
+            if getattr(p.role, "camp", None) != "wolf":
                 continue
             if isinstance(p.role, CharacterWolf):
                 wolves.append(p.role)

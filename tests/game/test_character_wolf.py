@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from game.character_black_wolf import CharacterBlackWolf
 from game.character_person import CharacterPerson
 from game.character_wolf import CharacterWolf
 
@@ -21,6 +22,7 @@ async def test_on_night_start__alive_resets_and_locks(room_factory, players_fact
     assert wolf.kill_responded is False
     assert wolf.night_vote_target_user_id is None
     assert wolf.skill_kill_available is True
+    assert wolf._night_end_locked is True
     assert room.events_system.event_night_end.lock_count >= 1
     assert "你是狼人" in fake_io["private_messages"][-1][1]
 
@@ -38,6 +40,7 @@ async def test_on_night_start__dead_user_ignored(room_factory, players_factory) 
     await wolf.on_night_start(room, None, [])
 
     assert room.events_system.event_night_end.lock_count == lock_before
+    assert wolf._night_end_locked is False
 
 
 @pytest.mark.character
@@ -178,6 +181,22 @@ def test_alive_wolves__returns_only_alive_wolf_instances(room_factory, players_f
 
 
 @pytest.mark.character
+def test_alive_wolves__includes_black_wolf(room_factory, players_factory) -> None:
+    room = room_factory()
+    players = players_factory(room, 3, 1001)
+    wolf = CharacterWolf(room, players[0])
+    black_wolf = CharacterBlackWolf(room, players[1])
+    villager = CharacterPerson(room, players[2])
+    players[0].role = wolf
+    players[1].role = black_wolf
+    players[2].role = villager
+
+    alive_wolves = wolf._alive_wolves()
+
+    assert alive_wolves == [wolf, black_wolf]
+
+
+@pytest.mark.character
 @pytest.mark.asyncio
 async def test_try_lock_pack__majority_vote_locks_target(room_factory, players_factory) -> None:
     room = room_factory()
@@ -250,7 +269,13 @@ async def test_on_wolf_locked__disable_skill(room_factory, players_factory) -> N
     players = players_factory(room, 1, 1001)
     wolf = CharacterWolf(room, players[0])
     wolf.skill_kill_available = True
+    wolf._night_end_locked = True
+    room.events_system.event_night_end.unlock = AsyncMock()
 
     await wolf.on_wolf_locked(room, None, [])
 
     assert wolf.skill_kill_available is False
+    assert wolf._night_end_locked is False
+    room.events_system.event_night_end.unlock.assert_awaited_once_with(
+        room, "1001", []
+    )
